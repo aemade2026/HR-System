@@ -915,11 +915,13 @@ class ApiService {
    */
   static getRequestTypeName(type) {
     const map = {
+      onboarding: 'طلب انضمام موظف جديد',
       annual_leave: 'إجازة اعتيادي',
       casual_leave: 'إجازة عارضة',
       sick_leave: 'إجازة مرضي',
       morning_delay: 'إذن تأخير',
       early_leave: 'إذن خروج',
+      advance_salary: 'طلب سلفة مالية',
       salary_adjustment: 'تعديل راتب',
       complaint: 'شكوى',
       resignation: 'استقالة'
@@ -1026,6 +1028,7 @@ class ApiService {
       emp.id;
     return {
       id: emp.id || emp.employee_code,
+      employee_code: emp.employee_code || emp.employeeCode || (String(emp.id || '').startsWith('EMP-') ? emp.id : 'EMP-1001'),
       fullName: fullName,
       first_name: emp.first_name || fullName.split(' ')[0] || '',
       last_name: emp.last_name || fullName.split(' ').slice(1).join(' ') || '',
@@ -1497,7 +1500,7 @@ class ApiService {
     try {
       await this.simulateDelay(60, signal);
       const companyId = this.getCurrentCompanyId();
-      let pending = null;
+      let pending = [];
 
       if (supabase) {
         try {
@@ -1512,14 +1515,27 @@ class ApiService {
         } catch (e) {}
       }
 
-      if (pending === null) {
-        const db = LocalDatabase.getDB();
-        pending = (db.employees || []).filter(e => e.status === 'pending');
-      }
+      // دمج الموظفين المعلقين من LocalDatabase لضمان عدم ضياع أي موظف محلي
+      const db = LocalDatabase.getDB();
+      const localPending = (db.employees || []).filter(e => e.status === 'pending').map(e => this.#normalizeEmployee(e));
+      localPending.forEach(lp => {
+        if (!pending.some(p => p.id === lp.id || (p.employee_code && p.employee_code === lp.employee_code))) {
+          pending.push(lp);
+        }
+      });
+
+      // استبعاد أي موظف تم اعتماده وتفعيله بالفعل كـ active
+      const activeIds = new Set((db.employees || []).filter(e => e.status === 'active').map(e => e.id));
+      const activeCodes = new Set((db.employees || []).filter(e => e.status === 'active').map(e => e.employee_code).filter(Boolean));
+      pending = pending.filter(p => !activeIds.has(p.id) && !activeCodes.has(p.employee_code) && !activeCodes.has(p.id));
 
       return cloneData(pending);
     } catch (err) {
-      return [];
+      const db = LocalDatabase.getDB();
+      const activeIds = new Set((db.employees || []).filter(e => e.status === 'active').map(e => e.id));
+      const activeCodes = new Set((db.employees || []).filter(e => e.status === 'active').map(e => e.employee_code).filter(Boolean));
+      const fallback = (db.employees || []).filter(e => e.status === 'pending' && !activeIds.has(e.id) && !activeCodes.has(e.employee_code)).map(e => this.#normalizeEmployee(e));
+      return cloneData(fallback);
     }
   }
 
@@ -1582,6 +1598,51 @@ class ApiService {
       // 2. الحفظ في LocalDatabase
       if (!Array.isArray(db.employees)) db.employees = [];
       db.employees.push(newEmp);
+
+      // 3. تسجيل طلب اعتماد انضمام فوري في جدول الطلبات لربط الموظف بالإدارة فوراً
+      const onboardingRequest = {
+        id: `REQ-ONB-${newId}`,
+        company_id: companyId,
+        employee_id: newId,
+        employeeId: newId,
+        type: 'onboarding',
+        request_type: 'onboarding',
+        status: 'pending',
+        startDate: newEmp.hireDate,
+        submittedAt: newEmp.registeredAt,
+        createdAt: newEmp.hireDate,
+        reason: `طلب تسجيل وانضمام موظف جديد بقسم (${newEmp.department}) - بانتظار الاعتماد وتحديد الراتب والصلاحيات`,
+        employee: newEmp,
+        details: {
+          fullName: newEmp.fullName,
+          phone: newEmp.phone,
+          email: newEmp.email,
+          department: newEmp.department,
+          jobTitle: newEmp.jobTitle,
+          rawEmployee: newEmp
+        }
+      };
+
+      if (!Array.isArray(db.requests)) db.requests = [];
+      db.requests.unshift(onboardingRequest);
+
+      if (supabase) {
+        try {
+          await supabase.from('requests').insert([{
+            id: `REQ-ONB-${newId}`,
+            company_id: companyId,
+            employee_id: newId,
+            request_type: 'onboarding',
+            status: 'pending',
+            created_at: newEmp.registeredAt,
+            reason: `طلب انضمام موظف جديد بقسم (${newEmp.department})`,
+            details: onboardingRequest.details
+          }]);
+        } catch (sbReqErr) {
+          console.warn('[Supabase onboarding request insert]:', sbReqErr);
+        }
+      }
+
       LocalDatabase.saveDB(db);
 
       AuditMiddleware.log({
@@ -1614,7 +1675,23 @@ class ApiService {
       await this.simulateDelay(100);
       const companyId = this.getCurrentCompanyId();
       const db = LocalDatabase.getDB();
-      const emp = (db.employees || []).find(e => e.id === id);
+      let emp = (db.employees || []).find(e => e.id === id || e.employee_code === id);
+
+      if (!emp && supabase) {
+        try {
+          const { data } = await supabase
+            .from('employees')
+            .select('*')
+            .eq('company_id', companyId)
+            .or(`id.eq.${id},employee_code.eq.${id}`)
+            .maybeSingle();
+          if (data) {
+            emp = this.#normalizeEmployee(data);
+            if (!Array.isArray(db.employees)) db.employees = [];
+            db.employees.push(emp);
+          }
+        } catch (e) {}
+      }
 
       if (!emp) {
         return this.#createEnvelope(false, null, 'الموظف غير موجود');
@@ -1632,22 +1709,81 @@ class ApiService {
       if (approvalData.commissionRate !== undefined) emp.commissionRate = Number(approvalData.commissionRate);
       emp.salaryStatus = 'processing';
 
-      // 1. التحديث في Supabase مع فلتر company_id الإجباري
+      // تحديث أو إنشاء حالة طلب الاعتماد في LocalDatabase كـ approved
+      if (!Array.isArray(db.requests)) db.requests = [];
+      const matchingReqs = db.requests.filter(r => 
+        (r.employeeId === id || r.employee_id === id || r.employeeId === emp.id || r.employee_id === emp.id || r.id === `REQ-ONB-${id}` || r.id === `REQ-ONB-${emp.id}`) &&
+        (r.type === 'onboarding' || r.request_type === 'onboarding')
+      );
+
+      if (matchingReqs.length > 0) {
+        matchingReqs.forEach(req => {
+          req.status = 'approved';
+          req.manager_reply = `تم اعتماد وتفعيل الحساب بنجاح برتبة (${this.getRoleArabicTitle(emp.role)}) وراتب أساسي (${emp.baseSalary} ج.م)`;
+          req.reviewNotes = `تم اعتماد وتفعيل الحساب برتبة (${this.getRoleArabicTitle(emp.role)})`;
+          req.approvedAt = new Date().toISOString();
+          req.reviewedAt = new Date().toISOString();
+        });
+      } else {
+        db.requests.unshift({
+          id: `REQ-ONB-${emp.id || id}`,
+          company_id: companyId,
+          employee_id: emp.id || id,
+          employeeId: emp.id || id,
+          type: 'onboarding',
+          request_type: 'onboarding',
+          status: 'approved',
+          startDate: emp.registeredAt ? emp.registeredAt.split('T')[0] : (emp.hireDate || new Date().toISOString().split('T')[0]),
+          submittedAt: emp.registeredAt || emp.hireDate || new Date().toISOString(),
+          createdAt: emp.registeredAt ? emp.registeredAt.split('T')[0] : (emp.hireDate || new Date().toISOString().split('T')[0]),
+          reason: `طلب تسجيل وانضمام موظف جديد بقسم (${emp.department || 'عام'}) - تم الاعتماد والتفعيل`,
+          reviewNotes: `تم اعتماد وتفعيل الحساب برتبة (${this.getRoleArabicTitle(emp.role)}) وراتب أساسي (${emp.baseSalary} ج.م)`,
+          manager_reply: `تم اعتماد وتفعيل الحساب بنجاح برتبة (${this.getRoleArabicTitle(emp.role)}) وراتب أساسي (${emp.baseSalary} ج.م)`,
+          approvedAt: new Date().toISOString(),
+          reviewedAt: new Date().toISOString(),
+          employee: emp
+        });
+      }
+
+      // 1. التحديث الآمن في Supabase (تجنب الحقول غير الموجودة مثل manager_reply)
       if (supabase) {
         try {
-          await supabase
-            .from('employees')
-            .update({
-              status: 'active',
-              role: emp.role,
-              department: emp.department,
-              job_title: emp.jobTitle,
-              salary: emp.baseSalary
-            })
-            .eq('id', id)
-            .eq('company_id', companyId);
-        } catch (sbErr) {
-          console.warn('[Supabase approvePendingEmployee Fallback]:', sbErr);
+          const sbEmpUpdate = {
+            status: 'active',
+            role: emp.role,
+            department: emp.department,
+            job_title: emp.jobTitle,
+            salary: emp.baseSalary
+          };
+          if (emp.id) {
+            await supabase.from('employees').update(sbEmpUpdate).eq('id', emp.id).eq('company_id', companyId);
+          }
+          if (emp.employee_code) {
+            await supabase.from('employees').update(sbEmpUpdate).eq('employee_code', emp.employee_code).eq('company_id', companyId);
+          }
+          if (id && id !== emp.id && id !== emp.employee_code) {
+            await supabase.from('employees').update(sbEmpUpdate).eq('employee_code', id).eq('company_id', companyId);
+          }
+        } catch (sbEmpErr) {
+          console.warn('[Supabase approvePendingEmployee emp]:', sbEmpErr);
+        }
+
+        try {
+          const reqUpdatePayload = {
+            status: 'approved',
+            review_notes: `تم اعتماد وتفعيل الحساب برتبة (${this.getRoleArabicTitle(emp.role)}) وراتب أساسي (${emp.baseSalary} ج.م)`,
+            reviewed_at: new Date().toISOString()
+          };
+          await supabase.from('requests').update(reqUpdatePayload).eq('id', `REQ-ONB-${id}`).eq('company_id', companyId);
+          if (emp.id) {
+            await supabase.from('requests').update(reqUpdatePayload).eq('id', `REQ-ONB-${emp.id}`).eq('company_id', companyId);
+            await supabase.from('requests').update(reqUpdatePayload).eq('employee_id', emp.id).eq('request_type', 'onboarding').eq('company_id', companyId);
+          }
+          if (emp.employee_code) {
+            await supabase.from('requests').update(reqUpdatePayload).eq('employee_id', emp.employee_code).eq('request_type', 'onboarding').eq('company_id', companyId);
+          }
+        } catch (sbReqErr) {
+          console.warn('[Supabase approvePendingEmployee req]:', sbReqErr);
         }
       }
 
@@ -1677,25 +1813,60 @@ class ApiService {
       await this.simulateDelay(80);
       const companyId = this.getCurrentCompanyId();
       const db = LocalDatabase.getDB();
-      const idx = (db.employees || []).findIndex(e => e.id === id);
+      const idx = (db.employees || []).findIndex(e => e.id === id || e.employee_code === id);
       if (idx === -1) {
         return this.#createEnvelope(false, null, 'الموظف غير موجود');
       }
 
-      // 1. الحذف من Supabase مع فلتر company_id الإجباري
+      const [removed] = db.employees.splice(idx, 1);
+
+      // 1. الحذف الآمن من Supabase
       if (supabase) {
         try {
-          await supabase
-            .from('employees')
-            .delete()
-            .eq('id', id)
-            .eq('company_id', companyId);
+          if (removed.id) {
+            await supabase.from('employees').delete().eq('id', removed.id).eq('company_id', companyId);
+          }
+          if (removed.employee_code) {
+            await supabase.from('employees').delete().eq('employee_code', removed.employee_code).eq('company_id', companyId);
+          }
         } catch (sbErr) {
-          console.warn('[Supabase rejectPendingEmployee Fallback]:', sbErr);
+          console.warn('[Supabase rejectPendingEmployee emp]:', sbErr);
+        }
+
+        try {
+          const rejUpdate = {
+            status: 'rejected',
+            review_notes: 'تم رفض طلب التسجيل من قبل الإدارة',
+            reviewed_at: new Date().toISOString()
+          };
+          await supabase.from('requests').update(rejUpdate).eq('id', `REQ-ONB-${id}`).eq('company_id', companyId);
+          if (removed.id) {
+            await supabase.from('requests').update(rejUpdate).eq('id', `REQ-ONB-${removed.id}`).eq('company_id', companyId);
+            await supabase.from('requests').update(rejUpdate).eq('employee_id', removed.id).eq('request_type', 'onboarding').eq('company_id', companyId);
+          }
+          if (removed.employee_code) {
+            await supabase.from('requests').update(rejUpdate).eq('employee_id', removed.employee_code).eq('request_type', 'onboarding').eq('company_id', companyId);
+          }
+        } catch (sbReqErr) {
+          console.warn('[Supabase rejectPendingEmployee req]:', sbReqErr);
         }
       }
 
-      const [removed] = db.employees.splice(idx, 1);
+      // تحديث حالة طلب الاعتماد في LocalDatabase
+      if (Array.isArray(db.requests)) {
+        const matchingReqs = db.requests.filter(r => 
+          (r.employeeId === id || r.employee_id === id || r.employeeId === removed.id || r.employee_id === removed.id || r.id === `REQ-ONB-${id}` || r.id === `REQ-ONB-${removed.id}`) &&
+          (r.type === 'onboarding' || r.request_type === 'onboarding')
+        );
+        matchingReqs.forEach(req => {
+          req.status = 'rejected';
+          req.manager_reply = 'تم رفض طلب التسجيل من قبل الإدارة';
+          req.reviewNotes = 'مرفوض من قبل الإدارة';
+          req.rejectedAt = new Date().toISOString();
+          req.reviewedAt = new Date().toISOString();
+        });
+      }
+
       LocalDatabase.saveDB(db);
 
       AuditMiddleware.log({
@@ -2338,7 +2509,7 @@ class ApiService {
           if (!error && Array.isArray(data)) {
             const db = LocalDatabase.getDB();
             const empMap = {};
-            (db.employees || []).forEach(e => { empMap[e.id] = e; });
+            (db.employees || []).forEach(e => { empMap[e.id] = e; if (e.employee_code) empMap[e.employee_code] = e; });
             list = data.map(r => this.#normalizeRequest(r, empMap));
           }
         } catch (sbErr) {
@@ -2346,16 +2517,86 @@ class ApiService {
         }
       }
 
-      // 2. آلية Fallback على LocalDatabase
+      // 2. دمج الطلبات مع LocalDatabase
+      const db = LocalDatabase.getDB();
+      const localReqs = Array.isArray(db.requests) ? [...db.requests] : [];
       if (list === null) {
-        const db = LocalDatabase.getDB();
-        list = Array.isArray(db.requests) ? [...db.requests] : [];
-        if (filters.employeeId) list = list.filter(r => r.employeeId === filters.employeeId);
-        if (filters.type && filters.type !== 'all') list = list.filter(r => r.type === filters.type);
-        if (filters.status && filters.status !== 'all') list = list.filter(r => r.status === filters.status);
-        if (filters.month) list = list.filter(r => (r.startDate || r.submittedAt || '').startsWith(filters.month));
-        list.sort((a, b) => new Date(b.submittedAt || 0) - new Date(a.submittedAt || 0));
+        list = localReqs;
+      } else {
+        // دمج ومزامنة حالة الطلبات المحلية مع السحابية
+        localReqs.forEach(locReq => {
+          const idx = list.findIndex(r => r.id === locReq.id || (r.employeeId === locReq.employeeId && (r.type === locReq.type || r.request_type === locReq.type)));
+          if (idx !== -1) {
+            if (locReq.status && locReq.status !== list[idx].status) {
+              list[idx].status = locReq.status;
+              if (locReq.reviewNotes) list[idx].reviewNotes = locReq.reviewNotes;
+              if (locReq.reviewedAt) list[idx].reviewedAt = locReq.reviewedAt;
+            }
+          } else {
+            list.push(locReq);
+          }
+        });
       }
+
+      // 3. ربط وتزامن تلقائي: إذا كان الموظف active (معتمد)، فإن أي طلب انضمام onboarding خاص به يعتبر approved تلقائياً!
+      const allLocalEmps = (db.employees || []);
+      const empStatusMap = {};
+      allLocalEmps.forEach(e => {
+        if (e.id) empStatusMap[e.id] = e.status;
+        if (e.employee_code) empStatusMap[e.employee_code] = e.status;
+      });
+
+      list.forEach(r => {
+        if (r.type === 'onboarding' || r.request_type === 'onboarding') {
+          const empStatus = empStatusMap[r.employeeId] || empStatusMap[r.employee_id];
+          if (empStatus === 'active') {
+            r.status = 'approved';
+          }
+        }
+      });
+
+      // 4. دمج طلبات اعتماد الموظفين المعلقين الجدد (Onboarding) فقط لمن لا يزال status = 'pending'
+      const pendingEmps = allLocalEmps.filter(e => e.status === 'pending');
+      pendingEmps.forEach(pEmp => {
+        const alreadyExists = list.some(r => 
+          (r.employeeId === pEmp.id || r.employee_id === pEmp.id || r.id === `REQ-ONB-${pEmp.id}`) &&
+          (r.type === 'onboarding' || r.request_type === 'onboarding')
+        );
+
+        if (!alreadyExists) {
+          const synthReq = {
+            id: `REQ-ONB-${pEmp.id}`,
+            company_id: pEmp.company_id || companyId,
+            employee_id: pEmp.id,
+            employeeId: pEmp.id,
+            type: 'onboarding',
+            request_type: 'onboarding',
+            status: 'pending',
+            startDate: pEmp.registeredAt ? pEmp.registeredAt.split('T')[0] : (pEmp.hireDate || new Date().toISOString().split('T')[0]),
+            submittedAt: pEmp.registeredAt || pEmp.hireDate || new Date().toISOString(),
+            createdAt: pEmp.registeredAt ? pEmp.registeredAt.split('T')[0] : (pEmp.hireDate || new Date().toISOString().split('T')[0]),
+            reason: `طلب تسجيل وانضمام موظف جديد بقسم (${pEmp.department || 'عام'}) - بانتظار الاعتماد وتحديد الراتب والصلاحيات`,
+            employee: pEmp,
+            details: {
+              fullName: pEmp.fullName,
+              phone: pEmp.phone,
+              email: pEmp.email,
+              department: pEmp.department,
+              jobTitle: pEmp.jobTitle,
+              rawEmployee: pEmp
+            }
+          };
+          list.unshift(synthReq);
+        }
+      });
+
+      // 5. تطبيق الفلاتر الإضافية المطلوبة بدقة
+      if (filters.employeeId) list = list.filter(r => r.employeeId === filters.employeeId || r.employee_id === filters.employeeId);
+      if (filters.type && filters.type !== 'all') list = list.filter(r => (r.type === filters.type || r.request_type === filters.type));
+      if (filters.status && filters.status !== 'all') list = list.filter(r => r.status === filters.status);
+      if (filters.month) list = list.filter(r => (r.startDate || r.submittedAt || '').startsWith(filters.month));
+
+      list.sort((a, b) => new Date(b.submittedAt || b.createdAt || 0) - new Date(a.submittedAt || a.createdAt || 0));
 
       return this.#createEnvelope(true, cloneData(list));
     } catch (err) {
@@ -2736,10 +2977,18 @@ class ApiService {
         }
       }
 
-      // 2. آلية Fallback على LocalDatabase
+      // 2. آلية دمج الموظفين من LocalDatabase
+      const db = LocalDatabase.getDB();
+      const localEmps = (db.employees || []).filter(e => !e.company_id || e.company_id === companyId).map(e => this.#normalizeEmployee(e));
+
       if (employees === null) {
-        const db = LocalDatabase.getDB();
-        employees = (db.employees || []).filter(e => !e.company_id || e.company_id === companyId);
+        employees = localEmps;
+      } else {
+        localEmps.forEach(le => {
+          if (!employees.some(e => e.id === le.id || (e.employee_code && e.employee_code === le.employee_code))) {
+            employees.push(le);
+          }
+        });
       }
 
       return this.#createEnvelope(true, cloneData(employees));
@@ -2768,8 +3017,14 @@ class ApiService {
       }
 
       if (!emp) {
+        const db = LocalDatabase.getDB();
+        const found = (db.employees || []).find(e => e.id === id || e.employee_code === id);
+        if (found) emp = this.#normalizeEmployee(found);
+      }
+
+      if (!emp) {
         const res = await this.getEmployees(signal);
-        emp = (res.data || []).find(e => e.id === id);
+        emp = (res.data || []).find(e => e.id === id || e.employee_code === id);
       }
 
       if (!emp) return this.#createEnvelope(false, null, 'الموظف غير موجود');
@@ -2910,7 +3165,7 @@ class ApiService {
       }
 
       // 2. التحديث في LocalDatabase
-      const idx = (db.employees || []).findIndex(e => e.id === id);
+      const idx = (db.employees || []).findIndex(e => e.id === id || e.employee_code === id);
       if (idx !== -1) {
         db.employees[idx] = { ...db.employees[idx], ...safeFields };
         LocalDatabase.saveDB(db);

@@ -737,4 +737,19 @@ html.dark .auth-glass-card {
   letter-spacing: 0.02em;
 }
 
+/* Biometric Simulator & Dropdown Boundaries */
+#kioskEmpSelect {
+  max-width: 100% !important;
+  min-width: 0 !important;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+#fingerprintSection .max-w-md {
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+
 

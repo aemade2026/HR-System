@@ -180,8 +180,8 @@
           </button>
         </div>
 
-        <div class="text-center text-[11px] text-slate-500 dark:text-slate-400">
-          رموز تجريبية: <button type="button" class="px-1.5 py-0.5 rounded bg-blue-100 dark:bg-slate-800 text-blue-700 dark:text-blue-300 font-mono font-bold hover:bg-blue-200 transition-colors" data-demo-pin="123456" title="انقر لملء الرمز والدخول تلقائياً">123456</button> (مدير) • <button type="button" class="px-1.5 py-0.5 rounded bg-blue-100 dark:bg-slate-800 text-blue-700 dark:text-blue-300 font-mono font-bold hover:bg-blue-200 transition-colors" data-demo-pin="789123" title="انقر لملء الرمز والدخول تلقائياً">789123</button> (موظف)
+        <div id="authDemoPinChips" class="text-center text-[11px] text-slate-500 dark:text-slate-400">
+          <!-- Populated dynamically via JS -->
         </div>
       </div>
 
@@ -198,23 +198,16 @@
       </div>
 
       <!-- Fast 1-Click Demo Login Shortcuts -->
-      <div class="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700/80">
+      <div id="quickLoginSection" class="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700/80">
         <div class="flex items-center justify-between mb-2.5">
           <span class="text-[11px] font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
             <i class="fa-solid fa-bolt text-amber-500"></i>
-            دخول تجريبي سريع بنقرة واحدة:
+            دخول سريع بنقرة واحدة للمستخدمين المسجلين:
           </span>
           <span class="text-[10px] bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 px-2 py-0.5 rounded-full font-bold">1-Click Fast Access</span>
         </div>
-        <div class="grid grid-cols-2 gap-2.5">
-          <button type="button" id="quickLoginAdminBtn" class="py-2.5 px-3 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold text-xs shadow-md shadow-purple-500/20 flex items-center justify-center gap-1.5 transition-all active:scale-95">
-            <i class="fa-solid fa-user-shield text-xs"></i>
-            <span>دخول كمدير (م. أحمد)</span>
-          </button>
-          <button type="button" id="quickLoginEmpBtn" class="py-2.5 px-3 rounded-xl bg-gradient-to-r from-blue-600 to-teal-600 hover:from-blue-700 hover:to-teal-700 text-white font-bold text-xs shadow-md shadow-blue-500/20 flex items-center justify-center gap-1.5 transition-all active:scale-95">
-            <i class="fa-solid fa-user text-xs"></i>
-            <span>دخول كموظف (عمر)</span>
-          </button>
+        <div id="quickLoginButtonsWrapper" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          <!-- Populated dynamically via JS based on registered users -->
         </div>
       </div>
 
@@ -773,13 +766,13 @@
               المحطات التشغيلية
             </div>
             <div class="space-y-1">
-              <button class="nav-tab active-tab w-full px-3.5 py-2.5 rounded-xl text-base font-bold flex items-center gap-3 transition-all bg-blue-600 text-white shadow-md shadow-blue-500/20 text-right" data-target="module-kiosk">
-                <i class="fa-solid fa-fingerprint text-lg w-6 text-center"></i>
-                <span class="flex-1">كشك البصمة والـ PIN</span>
+              <button class="nav-tab w-full px-3.5 py-2.5 rounded-xl text-base font-bold flex items-center gap-3 transition-all text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-right" data-target="module-kiosk">
+                <i class="fa-solid fa-fingerprint text-lg w-6 text-center text-blue-600"></i>
+                <span class="flex-1">محطة الدخول و PIN</span>
                 <span class="bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200 text-xs px-2 py-0.5 rounded-full font-mono font-bold">Terminal</span>
               </button>
 
-              <button class="nav-tab w-full px-3.5 py-2.5 rounded-xl text-base font-bold flex items-center gap-3 transition-all text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-right" data-target="module-dashboard">
+              <button class="nav-tab active-tab w-full px-3.5 py-2.5 rounded-xl text-base font-bold flex items-center gap-3 transition-all bg-blue-600 text-white shadow-md shadow-blue-500/20 text-right" data-target="module-dashboard">
                 <i class="fa-solid fa-chart-pie text-lg w-6 text-center"></i>
                 <span class="flex-1">لوحة التحكم التنفيذية</span>
               </button>
@@ -868,17 +861,17 @@
       <!-- ================================================================ -->
       <!-- MODULE 1: ATTENDANCE KIOSK TERMINAL (شاشة كشك البصمة والدخول والخروج) -->
       <!-- ================================================================ -->
-      <section id="module-kiosk" class="module-section block space-y-6">
+      <section id="module-kiosk" class="module-section hidden space-y-6">
         
         <!-- Screen Title -->
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
-            <h1 class="text-xl sm:text-2xl lg:text-3xl font-extrabold tracking-tight leading-tight text-slate-900 dark:text-white">كشك البصمة ورمز PIN</h1>
-            <p class="text-xs sm:text-sm md:text-base text-slate-600 dark:text-slate-400 font-medium mt-1">نقطة تسجيل الحضور والانصراف البيومترية الذكية والموثقة للمنشأة</p>
+            <h1 class="text-xl sm:text-2xl lg:text-3xl font-extrabold tracking-tight leading-tight text-slate-900 dark:text-white">محطة التحقق وتسجيل الدخول الذكي</h1>
+            <p class="text-xs sm:text-sm md:text-base text-slate-600 dark:text-slate-400 font-medium mt-1">التحقق البيومتري وتسجيل الدخول الموثق للنظام عبر البصمة أو PIN</p>
           </div>
-          <div class="hidden sm:inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-100 dark:bg-blue-950/80 text-blue-800 dark:text-blue-300 text-xs font-bold border border-blue-200 dark:border-blue-800 shrink-0 self-start sm:self-auto">
+          <div class="hidden sm:inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 text-xs font-bold border border-emerald-200 dark:border-emerald-800 shrink-0 self-start sm:self-auto">
             <i class="fa-solid fa-shield-halved"></i>
-            محطة حضور بيومترية نشطة
+            محطة دخول وتحقق نشطة
           </div>
         </div>
 
@@ -919,28 +912,30 @@
               </div>
 
               <p id="scannerInstructionText" class="text-sm md:text-base font-bold text-slate-700 dark:text-slate-300 text-center mb-6">
-                ضع إصبعك على القارئ للمطابقة التلقائية الذكية (حضور أو انصراف)
+                ضع إصبعك على القارئ للتحقق وتسجيل الدخول الذكي الفوري للنظام
               </p>
 
               <!-- Hardware/Webhook Simulation Controls -->
-              <div class="w-full max-w-md p-4 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700">
-                <div class="flex items-center justify-between mb-2">
-                  <label class="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+              <div class="w-full max-w-md p-4 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden box-border">
+                <div class="flex items-center justify-between mb-2.5">
+                  <label for="kioskEmpSelect" class="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
                     <i class="fa-solid fa-sim-card text-blue-500"></i>
                     محاكاة قارئ البصمة البيومترية:
                   </label>
                   <span class="text-[11px] text-slate-500 dark:text-slate-400 font-mono font-semibold">Webhook Hook</span>
                 </div>
-                <div class="flex flex-col sm:flex-row gap-2">
-                  <select id="kioskEmpSelect" class="flex-1 px-3 py-2 rounded-lg text-base md:text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold">
-                    <!-- Populated dynamically via JS -->
-                  </select>
-                  <button id="triggerFingerprintPunchBtn" class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold flex items-center justify-center gap-1.5 shadow-md transition-all active:scale-95 shrink-0">
+                <div class="flex flex-col sm:flex-row items-stretch gap-2 w-full min-w-0">
+                  <div class="flex-1 min-w-0 relative">
+                    <select id="kioskEmpSelect" class="w-full min-w-0 px-3 py-2.5 rounded-lg text-xs sm:text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold truncate">
+                      <!-- Populated dynamically via JS -->
+                    </select>
+                  </div>
+                  <button id="triggerFingerprintPunchBtn" class="px-4 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 shadow-md transition-all active:scale-95 shrink-0 whitespace-nowrap">
                     <i class="fa-solid fa-fingerprint"></i>
-                    مسح البصمة
+                    <span>تسجيل الدخول</span>
                   </button>
                 </div>
-                <p class="text-[11px] text-slate-600 dark:text-slate-400 mt-2">
+                <p class="text-[11px] text-slate-600 dark:text-slate-400 mt-2.5 leading-relaxed">
                   يدعم الربط المباشر مع أجهزة البصمة عبر بروتوكول ZKTeco / Dahua / Webhooks.
                 </p>
               </div>
@@ -1036,7 +1031,7 @@
       <!-- ================================================================ -->
       <!-- MODULE 2: EXECUTIVE DASHBOARD (لوحة التحكم الرئيسية) -->
       <!-- ================================================================ -->
-      <section id="module-dashboard" class="module-section hidden space-y-6 sm:space-y-8">
+      <section id="module-dashboard" class="module-section block space-y-6 sm:space-y-8">
         
         <!-- Welcome Header -->
         <div class="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center justify-between gap-3">
@@ -1730,12 +1725,12 @@
         <div class="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-2">
           <button type="button" id="approvalsSubTabRequestsBtn" class="px-4 py-2 rounded-xl text-xs sm:text-sm font-extrabold bg-blue-600 text-white shadow-md shadow-blue-500/20 flex items-center gap-2 transition-all">
             <i class="fa-solid fa-file-signature"></i>
-            <span>طلبات الموظفين (إجازات / أذونات / سلف)</span>
+            <span>طلبات الموظفين والموافقات العامة (إجازات / أذونات / سلف / تعيين)</span>
             <span id="subTabRequestsBadge" class="px-2 py-0.5 rounded-full bg-white/20 text-white text-[11px] font-mono font-black">0</span>
           </button>
           <button type="button" id="approvalsSubTabOnboardingBtn" class="px-4 py-2 rounded-xl text-xs sm:text-sm font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2 transition-all">
             <i class="fa-solid fa-user-check"></i>
-            <span>اعتماد الموظفين الجدد (Onboarding)</span>
+            <span>اعتماد طلبات الموظفين الجدد (Onboarding)</span>
             <span id="subTabOnboardingBadge" class="px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-[11px] font-mono font-bold">0</span>
           </button>
         </div>
@@ -1756,8 +1751,9 @@
 
               <!-- Type Filter -->
               <div class="w-full sm:w-auto">
-                <select id="approvalsTypeFilter" class="w-full sm:w-44 px-3 py-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 font-bold focus:ring-2 focus:ring-blue-500">
+                <select id="approvalsTypeFilter" class="w-full sm:w-52 px-3 py-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 font-bold focus:ring-2 focus:ring-blue-500">
                   <option value="all">كل أنواع الطلبات</option>
+                  <option value="onboarding">طلبات انضمام موظف جديد (Onboarding) 👤✨</option>
                   <option value="annual_leave">إجازة اعتيادية</option>
                   <option value="casual_leave">إجازة عارضة</option>
                   <option value="sick_leave">إجازة مرضية</option>
@@ -2369,7 +2365,7 @@
       <div id="modalPunchIconBg" class="w-16 h-16 sm:w-20 sm:h-20 rounded-full mx-auto mb-4 bg-emerald-100 dark:bg-emerald-950/70 text-emerald-600 flex items-center justify-center text-3xl sm:text-4xl shadow-inner">
         <i id="modalPunchIcon" class="fa-solid fa-check"></i>
       </div>
-      <h3 id="modalPunchTitle" class="text-base sm:text-lg md:text-xl font-bold leading-snug text-slate-900 dark:text-white mb-1">تم تسجيل الحضور بنجاح</h3>
+      <h3 id="modalPunchTitle" class="text-base sm:text-lg md:text-xl font-bold leading-snug text-slate-900 dark:text-white mb-1">تم تسجيل الدخول بنجاح</h3>
       <p id="modalPunchMessage" aria-live="polite" class="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mb-5 font-medium">رسالة التأكيد</p>
       
       <div class="bg-slate-100 dark:bg-slate-800/90 rounded-xl p-4 text-right space-y-2.5 mb-5 border border-slate-200 dark:border-slate-700 text-sm font-medium">

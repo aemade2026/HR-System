@@ -265,7 +265,7 @@
       pinInput: '',
       soundEnabled: true,
       isDarkMode: false,
-      activeTab: 'module-kiosk',
+      activeTab: 'module-dashboard',
       activeSubTab: 'subtab-leaves',
       currentPayrollData: null,
       currentUser: null,
@@ -396,6 +396,8 @@
     if (res.success) {
       store.state.employees = res.data;
       populateEmployeeSelects();
+      populateAuthBioSelect();
+      renderQuickLoginShortcuts();
     }
   }
 
@@ -430,6 +432,16 @@
     }
   }
 
+  function getEmployeeCode(emp) {
+    if (!emp) return '';
+    if (emp.employee_code) return emp.employee_code;
+    if (emp.employeeCode) return emp.employeeCode;
+    const rawId = String(emp.id || '');
+    if (rawId.startsWith('EMP-')) return rawId;
+    if (rawId && !rawId.includes('-')) return rawId;
+    return 'EMP-1001';
+  }
+
   function populateEmployeeSelects() {
     const selects = [
       document.getElementById('kioskEmpSelect'),
@@ -447,7 +459,9 @@
       store.state.employees.forEach(emp => {
         const opt = document.createElement('option');
         opt.value = emp.id;
-        opt.textContent = `${emp.fullName} (${emp.id} - ${emp.department})`;
+        const code = getEmployeeCode(emp);
+        const dept = emp.department ? ` - ${emp.department}` : '';
+        opt.textContent = `${emp.fullName} (${code}${dept})`;
         sel.appendChild(opt);
       });
     });
@@ -598,7 +612,12 @@
     else if (targetId === 'module-attendance') renderAttendanceTable();
     else if (targetId === 'module-employees') renderEmployeesTable();
     else if (targetId === 'module-leaves') renderLeavesAndAdjustments();
-    else if (targetId === 'module-approvals') renderApprovalsTable();
+    else if (targetId === 'module-approvals') {
+      loadAndRenderAdminRequests();
+      renderApprovalsTable();
+      updateAdminNotifications();
+      refreshPendingApprovalsBadge();
+    }
     else if (targetId === 'module-payroll') renderPayrollModule();
     else if (targetId === 'module-settings') populateSettingsForm();
     else if (targetId === 'module-programmer') renderProgrammerPanel();
@@ -1363,7 +1382,7 @@
 
     const currentRole = resolveUserRole(emp);
     document.getElementById('progChangeRoleUserId').value = emp.id;
-    document.getElementById('progChangeRoleUserName').textContent = `${emp.fullName} (${emp.id})`;
+    document.getElementById('progChangeRoleUserName').textContent = `${emp.fullName} (${getEmployeeCode(emp)})`;
     document.getElementById('progChangeRoleCurrentRoleBadge').textContent = currentRole === 'programmer' ? 'مبرمج (Super Admin)' : (currentRole === 'manager' ? 'مدير (Manager)' : 'موظف (Employee)');
     document.getElementById('progChangeRoleUserAvatar').src = emp.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100';
 
@@ -2056,8 +2075,125 @@
         : (emp.role === 'hr' || emp.role === 'manager') 
         ? 'مدير (Manager)' 
         : 'موظف (Employee)';
-      opt.textContent = `${emp.fullName} (${emp.id} - ${roleArabic})`;
+      const code = getEmployeeCode(emp);
+      opt.textContent = `${emp.fullName} (${code} - ${roleArabic})`;
       sel.appendChild(opt);
+    });
+  }
+
+  /**
+   * Render dynamic 1-Click Fast Access login buttons & PIN chips based on registered users.
+   */
+  function renderQuickLoginShortcuts() {
+    const grid = document.getElementById('quickLoginButtonsWrapper');
+    if (!grid) return;
+
+    const employees = store.state.employees || [];
+    const activeEmployees = employees.filter(e => e.status !== 'pending' && e.status !== 'suspended');
+
+    if (activeEmployees.length === 0) {
+      grid.className = 'grid grid-cols-1 gap-2.5';
+      grid.innerHTML = `
+        <div class="text-center text-xs text-slate-500 dark:text-slate-400 py-2.5 bg-slate-100/80 dark:bg-slate-800/60 rounded-xl font-bold">
+          <i class="fa-solid fa-user-slash ml-1 text-slate-400"></i>
+          لا يوجد موظفون مسجلون حالياً
+        </div>
+      `;
+      updateDemoPinChips([]);
+      return;
+    }
+
+    // Separate users by role: Admin/Manager vs regular Employee
+    const adminUser = activeEmployees.find(e => e.role === 'programmer' || e.role === 'admin' || e.role === 'manager') || activeEmployees[0];
+    const otherUsers = activeEmployees.filter(e => e.id !== adminUser.id);
+    const regularUser = otherUsers.find(e => e.role === 'employee' || e.role === 'sales') || otherUsers[0];
+
+    const usersToShow = [];
+    if (adminUser) usersToShow.push({ user: adminUser, type: 'admin' });
+    if (regularUser) usersToShow.push({ user: regularUser, type: 'employee' });
+
+    // Set responsive grid columns: 1 column if 1 user, 2 columns if 2 users
+    grid.className = usersToShow.length === 1 
+      ? 'grid grid-cols-1 gap-2.5' 
+      : 'grid grid-cols-1 sm:grid-cols-2 gap-2.5';
+
+    grid.innerHTML = usersToShow.map(({ user, type }) => {
+      const isManager = type === 'admin';
+      const roleText = (user.role === 'programmer' || user.role === 'admin') 
+        ? 'كمسؤول' 
+        : (user.role === 'manager' ? 'كمدير' : 'كموظف');
+      const cleanName = (user.fullName || '').trim();
+      const displayName = cleanName.length > 18 ? cleanName.split(' ')[0] : cleanName;
+      const bgClass = isManager 
+        ? 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 shadow-purple-500/20' 
+        : 'bg-gradient-to-r from-blue-600 to-teal-600 hover:from-blue-700 hover:to-teal-700 shadow-blue-500/20';
+      const icon = isManager ? 'fa-user-shield' : 'fa-user';
+
+      return `
+        <button type="button" data-quick-user-id="${escapeHTML(user.id)}" class="py-2.5 px-3 rounded-xl ${bgClass} text-white font-bold text-xs shadow-md flex items-center justify-center gap-1.5 transition-all active:scale-95 truncate" title="دخول سريع: ${escapeHTML(user.fullName)}">
+          <i class="fa-solid ${icon} text-xs shrink-0"></i>
+          <span class="truncate">دخول ${roleText} (${escapeHTML(displayName)})</span>
+        </button>
+      `;
+    }).join('');
+
+    // Bind click events to login instantly
+    grid.querySelectorAll('[data-quick-user-id]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const userId = btn.dataset.quickUserId;
+        const targetEmp = activeEmployees.find(e => e.id === userId);
+        if (!targetEmp) return;
+
+        sound.playClick();
+        showToast(`جاري تسجيل الدخول السريع: ${targetEmp.fullName}...`, 'info', 1500);
+
+        const res = await ApiService.loginWithFingerprint(targetEmp.id, true);
+        const user = res.user || res.data?.user || res.employee || res.data?.employee;
+        if (res.success && user) {
+          sound.playSuccess();
+          const permissions = res.data?.permissions || res.permissions;
+          showToast(`مرحباً يا ${user.fullName}! تم تسجيل الدخول بنجاح`, 'success', 3000);
+          await applyUserRoleAndNavigate(user, permissions);
+        } else {
+          sound.playError();
+          showToast(res.message || 'فشل تسجيل الدخول السريع', 'error', 3500);
+        }
+      });
+    });
+
+    updateDemoPinChips(usersToShow.map(u => u.user));
+  }
+
+  function updateDemoPinChips(users) {
+    const container = document.getElementById('authDemoPinChips');
+    if (!container) return;
+
+    if (!users || users.length === 0) {
+      container.innerHTML = '';
+      return;
+    }
+
+    const chips = users.map(emp => {
+      const pin = emp.pin || '123456';
+      const roleTitle = (emp.role === 'programmer' || emp.role === 'admin') 
+        ? 'مسؤول' 
+        : (emp.role === 'manager' ? 'مدير' : 'موظف');
+      const cleanName = (emp.fullName || '').trim().split(' ')[0] || emp.fullName;
+      return `<button type="button" class="px-1.5 py-0.5 rounded bg-blue-100 dark:bg-slate-800 text-blue-700 dark:text-blue-300 font-mono font-bold hover:bg-blue-200 transition-colors" data-demo-pin="${escapeHTML(pin)}" title="انقر لملء رمز PIN الخاص بـ ${escapeHTML(emp.fullName)}">${escapeHTML(pin)}</button> (${escapeHTML(roleTitle)}: ${escapeHTML(cleanName)})`;
+    });
+
+    container.innerHTML = `رموز PIN التجريبية للمسجلين: ${chips.join(' • ')}`;
+
+    container.querySelectorAll('[data-demo-pin]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        sound.playClick();
+        const pin = btn.dataset.demoPin;
+        if (pin) {
+          store.state.authPinInput = pin;
+          updateAuthPinDots();
+          submitAuthPinLogin(pin);
+        }
+      });
     });
   }
 
@@ -2116,7 +2252,7 @@
         if (res.success && user) {
           sound.playSuccess();
           const permissions = res.data?.permissions || res.permissions;
-          showToast(`أهلاً بك يا ${user.fullName}! تم التحقق من البصمة الحيوية بنجاح`, 'success', 3000);
+          showToast(`تم تسجيل الدخول بنجاح! مرحباً بك يا ${user.fullName}`, 'success', 3000);
           await applyUserRoleAndNavigate(user, permissions);
         } else {
           sound.playError();
@@ -2128,55 +2264,8 @@
     authScannerWidget?.addEventListener('click', executeBioLogin);
     authBioLoginBtn?.addEventListener('click', executeBioLogin);
 
-    // Fast 1-Click Demo Login Buttons
-    const quickLoginAdminBtn = document.getElementById('quickLoginAdminBtn');
-    const quickLoginEmpBtn = document.getElementById('quickLoginEmpBtn');
-
-    quickLoginAdminBtn?.addEventListener('click', async () => {
-      sound.playClick();
-      showToast('جاري تسجيل الدخول السريع كمدير النظام (م. أحمد منصور)...', 'info', 1500);
-      const res = await ApiService.loginWithFingerprint('EMP-1001', true);
-      const user = res.user || res.data?.user || res.employee || res.data?.employee;
-      const session = res.session || res.data?.session;
-      if (res.success && user) {
-        sound.playSuccess();
-        const permissions = res.data?.permissions || res.permissions;
-        showToast(`مرحباً يا ${user.fullName}! تم تسجيل الدخول كمدير نظام`, 'success', 3000);
-        await applyUserRoleAndNavigate(user, permissions);
-      } else {
-        showToast(res.message || 'فشل تسجيل الدخول السريع', 'error');
-      }
-    });
-
-    quickLoginEmpBtn?.addEventListener('click', async () => {
-      sound.playClick();
-      showToast('جاري تسجيل الدخول السريع كموظف (م. عمر الشناوي)...', 'info', 1500);
-      const res = await ApiService.loginWithFingerprint('EMP-1003', true);
-      const user = res.user || res.data?.user || res.employee || res.data?.employee;
-      const session = res.session || res.data?.session;
-      if (res.success && user) {
-        sound.playSuccess();
-        const permissions = res.data?.permissions || res.permissions;
-        showToast(`مرحباً يا ${user.fullName}! تم فتح بوابتك الشخصية بنجاح`, 'success', 3000);
-        await applyUserRoleAndNavigate(user, permissions);
-      } else {
-        showToast(res.message || 'فشل تسجيل الدخول السريع', 'error');
-      }
-    });
-
-    // Clickable demo PIN chips
-    const demoPinBtns = document.querySelectorAll('[data-demo-pin]');
-    demoPinBtns.forEach(btn => {
-      btn.addEventListener('click', () => {
-        sound.playClick();
-        const pin = btn.dataset.demoPin;
-        if (pin) {
-          store.state.authPinInput = pin;
-          updateAuthPinDots();
-          submitAuthPinLogin(pin);
-        }
-      });
-    });
+    // Dynamic 1-Click Fast Access Buttons & PIN Chips
+    renderQuickLoginShortcuts();
 
     // 6-Digit PIN Numpad Handlers
     const authNumpadBtns = document.querySelectorAll('.auth-numpad-btn[data-num]');
@@ -2919,6 +3008,13 @@
    */
   function getRequestTypeDisplayInfo(type) {
     switch (type) {
+      case 'onboarding':
+        return {
+          title: 'طلب انضمام موظف جديد (Onboarding)',
+          icon: 'fa-user-plus',
+          bgClass: 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border-purple-300 dark:border-purple-800',
+          badgeColor: 'purple'
+        };
       case 'annual_leave':
         return {
           title: 'إجازة اعتيادية سنوية',
@@ -3374,6 +3470,71 @@
     // Requests table in-row action delegation (Approve / Reject decision)
     const adminReqTbody = document.getElementById('adminRequestsTableBody');
     adminReqTbody?.addEventListener('click', async (e) => {
+      // 1. اعتماد وتعيين مرشح انضمام جديد
+      const approveOnboardBtn = e.target.closest('[data-action="manager-approve-onboarding"]');
+      if (approveOnboardBtn) {
+        sound.playClick();
+        const empId = approveOnboardBtn.dataset.id;
+        
+        let candidate = (await ApiService.getPendingEmployees()).find(c => c.id === empId || c.employee_code === empId);
+        if (!candidate) {
+          candidate = (store.state.employees || []).find(e => e.id === empId || e.employee_code === empId);
+        }
+        if (!candidate) {
+          const empRes = await ApiService.getEmployeeById(empId);
+          if (empRes?.success && empRes.data) candidate = empRes.data;
+        }
+        if (!candidate) {
+          const allRes = await ApiService.getRequests();
+          const allReqs = allRes?.data || (Array.isArray(allRes) ? allRes : []);
+          const matchReq = allReqs.find(r => r.employeeId === empId || r.employee_id === empId || r.id === `REQ-ONB-${empId}`);
+          if (matchReq) {
+            candidate = matchReq.employee || matchReq.details?.rawEmployee;
+          }
+        }
+        if (!candidate) {
+          const row = approveOnboardBtn.closest('tr');
+          const nameEl = row?.querySelector('.font-bold.text-slate-900');
+          const deptEl = row?.querySelectorAll('td')?.[1];
+          candidate = {
+            id: empId,
+            fullName: nameEl ? nameEl.textContent.trim() : 'موظف جديد',
+            department: deptEl ? deptEl.textContent.trim() : 'المبيعات والتسويق',
+            role: 'employee',
+            baseSalary: 7500
+          };
+        }
+
+        openApprovalModal(candidate);
+        return;
+      }
+
+      // 2. رفض طلب مرشح انضمام جديد
+      const rejectOnboardBtn = e.target.closest('[data-action="manager-reject-onboarding"]');
+      if (rejectOnboardBtn) {
+        sound.playClick();
+        const empId = rejectOnboardBtn.dataset.id;
+        if (confirm('هل أنت متأكد من رفض طلب هذا المرشح وإلغاء تسجيله نهائياً؟')) {
+          const res = await ApiService.rejectPendingEmployee(empId);
+          if (res.success) {
+            sound.playSuccess();
+            const row = rejectOnboardBtn.closest('tr');
+            if (row) row.remove();
+            showToast('تم رفض طلب تسجيل الموظف', 'info');
+            await loadEmployees();
+            await loadAndRenderAdminRequests();
+            await renderApprovalsTable();
+            refreshPendingApprovalsBadge();
+            updateAdminNotifications();
+          } else {
+            sound.playError();
+            showToast(res.message || 'حدث خطأ أثناء رفض الطلب', 'error');
+          }
+        }
+        return;
+      }
+
+      // 3. اتخاذ قرار بالقبول لطلب إداري اعتيادي
       const approveBtn = e.target.closest('[data-action="manager-approve-req"]');
       if (approveBtn) {
         sound.playClick();
@@ -3381,10 +3542,18 @@
         const allRes = await ApiService.getRequests();
         const all = allRes?.data || (Array.isArray(allRes) ? allRes : []);
         const req = all.find(r => r.id === reqId);
-        if (req) openManagerDecisionModal(req, 'approved');
+        if (req) {
+          if (req.type === 'onboarding') {
+            const candidate = req.employee || store.state.employees.find(e => e.id === req.employeeId) || { id: req.employeeId, fullName: req.employeeId };
+            openApprovalModal(candidate);
+          } else {
+            openManagerDecisionModal(req, 'approved');
+          }
+        }
         return;
       }
 
+      // 4. اتخاذ قرار بالرفض لطلب إداري اعتيادي
       const rejectBtn = e.target.closest('[data-action="manager-reject-req"]');
       if (rejectBtn) {
         sound.playClick();
@@ -3392,7 +3561,21 @@
         const allRes = await ApiService.getRequests();
         const all = allRes?.data || (Array.isArray(allRes) ? allRes : []);
         const req = all.find(r => r.id === reqId);
-        if (req) openManagerDecisionModal(req, 'rejected');
+        if (req) {
+          if (req.type === 'onboarding') {
+            if (confirm('هل أنت متأكد من رفض طلب هذا المرشح وإلغاء تسجيله نهائياً؟')) {
+              await ApiService.rejectPendingEmployee(req.employeeId);
+              showToast('تم رفض طلب تسجيل الموظف', 'info');
+              await loadEmployees();
+              loadAndRenderAdminRequests();
+              renderApprovalsTable();
+              refreshPendingApprovalsBadge();
+              updateAdminNotifications();
+            }
+          } else {
+            openManagerDecisionModal(req, 'rejected');
+          }
+        }
         return;
       }
     });
@@ -3473,6 +3656,45 @@
       }
     });
 
+    // Notification dropdown click delegation
+    const notifListEl = document.getElementById('adminNotificationsList');
+    notifListEl?.addEventListener('click', async (e) => {
+      const onboardBtn = e.target.closest('[data-action="notif-approve-onboarding"]');
+      if (onboardBtn) {
+        sound.playClick();
+        notifDropdown?.classList.add('hidden');
+        navigateToAdminModule('module-approvals');
+        const empId = onboardBtn.dataset.id;
+        const pendingList = await ApiService.getPendingEmployees();
+        let candidate = pendingList.find(c => c.id === empId);
+        if (!candidate) {
+          candidate = (store.state.employees || []).find(e => e.id === empId);
+        }
+        if (candidate) openApprovalModal(candidate);
+        return;
+      }
+
+      const reqBtn = e.target.closest('[data-action="manager-approve-req"], [data-action="notif-approve-req"]');
+      if (reqBtn) {
+        sound.playClick();
+        notifDropdown?.classList.add('hidden');
+        navigateToAdminModule('module-approvals');
+        const reqId = reqBtn.dataset.id;
+        const allRes = await ApiService.getRequests();
+        const all = allRes?.data || (Array.isArray(allRes) ? allRes : []);
+        const req = all.find(r => r.id === reqId);
+        if (req) {
+          if (req.type === 'onboarding') {
+            const candidate = req.employee || store.state.employees.find(e => e.id === req.employeeId) || { id: req.employeeId, fullName: req.employeeId };
+            openApprovalModal(candidate);
+          } else {
+            openManagerDecisionModal(req, 'approved');
+          }
+        }
+        return;
+      }
+    });
+
     // Onboarding Module Handlers (Existing logic preserved & unified)
     const onboardingTbody = document.getElementById('approvalsTableBody');
     const onboardingModal = document.getElementById('approvalModal');
@@ -3490,7 +3712,10 @@
         sound.playClick();
         const id = approveCandidateBtn.dataset.id;
         const pendingList = await ApiService.getPendingEmployees();
-        const candidate = pendingList.find(c => c.id === id);
+        let candidate = pendingList.find(c => c.id === id);
+        if (!candidate) {
+          candidate = (store.state.employees || []).find(e => e.id === id);
+        }
         if (candidate) openApprovalModal(candidate);
         return;
       }
@@ -3499,85 +3724,212 @@
       if (rejectCandidateBtn) {
         sound.playClick();
         const id = rejectCandidateBtn.dataset.id;
-        if (confirm('هل أنت متأكد من رفض هذا الطلب وإلغاء تسجيل المرشح؟')) {
+        if (confirm('هل أنت متأكد من رفض هذا الطلب وإلغاء تسجيل المرشح نهائياً؟')) {
           const res = await ApiService.rejectPendingEmployee(id);
           if (res.success) {
             sound.playSuccess();
             showToast('تم رفض طلب التسجيل', 'info');
             await loadEmployees();
+            populateAuthBioSelect();
+            renderQuickLoginShortcuts();
+            updateDemoPinChips();
+            loadAndRenderAdminRequests();
             renderApprovalsTable();
             refreshPendingApprovalsBadge();
+            updateAdminNotifications();
           }
         }
       }
     });
 
+    const closeApprovalModal = () => {
+      const modal = document.getElementById('approvalModal');
+      if (modal) {
+        modal.classList.add('hidden');
+        modal.style.display = 'none';
+        modal.style.removeProperty('display');
+      }
+      document.body.classList.remove('overflow-hidden');
+    };
+
+    onboardingCloseBtn?.addEventListener('click', closeApprovalModal);
+    onboardingCancelBtn?.addEventListener('click', closeApprovalModal);
+    onboardingModal?.addEventListener('click', (e) => {
+      if (e.target === onboardingModal) closeApprovalModal();
+    });
+
     function openApprovalModal(c) {
-      document.getElementById('approvalCandidateName').textContent = c.fullName;
-      document.getElementById('approvalCandidateId').textContent = c.id;
-      document.getElementById('approvalCandidateEmail').textContent = c.email || 'غير مسجل';
-      document.getElementById('approvalCandidatePhone').textContent = c.phone || 'غير مسجل';
-      document.getElementById('approvalEmpId').value = c.id;
+      if (!c) {
+        showToast('لم يتم العثور على بيانات المرشح', 'warning');
+        return;
+      }
 
-      document.getElementById('approvalRoleSelect').value = 'employee';
-      document.getElementById('approvalDeptSelect').value = c.department || 'العمليات والتشغيل';
-      document.getElementById('approvalJobTitle').value = 'أخصائي عمليات';
-      document.getElementById('approvalBaseSalary').value = c.baseSalary || 7500;
-      document.getElementById('approvalHousing').value = c.housingAllowance || 1000;
-      document.getElementById('approvalTransport').value = c.transportAllowance || 800;
-      document.getElementById('approvalOther').value = c.otherAllowances || 500;
-      document.getElementById('approvalSalesTarget').value = c.salesTarget || 15000;
-      document.getElementById('approvalCommissionRate').value = c.commissionRate || 3;
+      const nameEl = document.getElementById('approvalCandidateName');
+      const idEl = document.getElementById('approvalCandidateId');
+      const emailEl = document.getElementById('approvalCandidateEmail');
+      const phoneEl = document.getElementById('approvalCandidatePhone');
+      const empIdInput = document.getElementById('approvalEmpId');
 
-      onboardingModal?.classList.remove('hidden');
+      if (nameEl) nameEl.textContent = c.fullName || 'موظف جديد';
+      if (idEl) idEl.textContent = getEmployeeCode(c);
+      if (emailEl) emailEl.textContent = c.email || 'غير مسجل';
+      if (phoneEl) phoneEl.textContent = c.phone || 'غير مسجل';
+      if (empIdInput) empIdInput.value = c.id;
+
+      const roleSelect = document.getElementById('approvalRoleSelect');
+      if (roleSelect) roleSelect.value = c.role || 'employee';
+
+      const deptSelect = document.getElementById('approvalDeptSelect');
+      if (deptSelect && c.department) {
+        let matched = false;
+        for (let i = 0; i < deptSelect.options.length; i++) {
+          const opt = deptSelect.options[i];
+          if (opt.value === c.department || c.department.includes(opt.value) || opt.value.includes(c.department)) {
+            deptSelect.selectedIndex = i;
+            matched = true;
+            break;
+          }
+        }
+        if (!matched) {
+          const newOpt = document.createElement('option');
+          newOpt.value = c.department;
+          newOpt.textContent = c.department;
+          deptSelect.appendChild(newOpt);
+          deptSelect.value = c.department;
+        }
+      }
+
+      const jobTitleInput = document.getElementById('approvalJobTitle');
+      if (jobTitleInput) jobTitleInput.value = c.jobTitle || ('أخصائي ' + (c.department || 'العمليات'));
+
+      const baseSalaryInput = document.getElementById('approvalBaseSalary');
+      if (baseSalaryInput) baseSalaryInput.value = c.baseSalary || 7500;
+
+      const housingInput = document.getElementById('approvalHousing');
+      if (housingInput) housingInput.value = c.housingAllowance || 1000;
+
+      const transportInput = document.getElementById('approvalTransport');
+      if (transportInput) transportInput.value = c.transportAllowance || 800;
+
+      const otherInput = document.getElementById('approvalOther');
+      if (otherInput) otherInput.value = c.otherAllowances || 500;
+
+      const salesTargetInput = document.getElementById('approvalSalesTarget');
+      if (salesTargetInput) salesTargetInput.value = c.salesTarget || 15000;
+
+      const commissionRateInput = document.getElementById('approvalCommissionRate');
+      if (commissionRateInput) commissionRateInput.value = c.commissionRate || 3;
+
+      const modal = document.getElementById('approvalModal');
+      if (modal) {
+        modal.classList.remove('hidden');
+        modal.style.display = 'flex';
+      }
     }
 
     onboardingForm?.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const empId = document.getElementById('approvalEmpId').value;
+      const empId = document.getElementById('approvalEmpId')?.value;
       if (!empId) return;
 
-      const payload = {
-        role: document.getElementById('approvalRoleSelect').value,
-        department: document.getElementById('approvalDeptSelect').value,
-        jobTitle: document.getElementById('approvalJobTitle').value.trim(),
-        baseSalary: Number(document.getElementById('approvalBaseSalary').value || 0),
-        housingAllowance: Number(document.getElementById('approvalHousing').value || 0),
-        transportAllowance: Number(document.getElementById('approvalTransport').value || 0),
-        otherAllowances: Number(document.getElementById('approvalOther').value || 0),
-        salesTarget: Number(document.getElementById('approvalSalesTarget').value || 0),
-        commissionRate: Number(document.getElementById('approvalCommissionRate').value || 0)
-      };
+      const submitBtn = onboardingForm.querySelector('button[type="submit"]');
+      const originalBtnHtml = submitBtn ? submitBtn.innerHTML : '';
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin ml-1.5"></i> جاري الاعتماد...';
+      }
 
-      const res = await ApiService.approvePendingEmployee(empId, payload);
-      if (res.success) {
-        sound.playSuccess();
-        onboardingModal?.classList.add('hidden');
-        showToast(`تم اعتماد الموظف (${res.employee.fullName}) وتفعيل حسابه بصلاحية (${payload.role === 'admin' ? 'مدير نظام' : payload.role === 'hr' ? 'مسؤول HR' : 'موظف'}) بنجاح!`, 'success', 5000);
-        await loadEmployees();
-        populateAuthBioSelect();
-        renderApprovalsTable();
-        refreshPendingApprovalsBadge();
-        renderEmployeesTable();
-      } else {
-        sound.playError();
-        showToast(res.message, 'error');
+      try {
+        const payload = {
+          role: document.getElementById('approvalRoleSelect')?.value || 'employee',
+          department: document.getElementById('approvalDeptSelect')?.value || 'العمليات والتشغيل',
+          jobTitle: (document.getElementById('approvalJobTitle')?.value || '').trim() || 'موظف',
+          baseSalary: Number(document.getElementById('approvalBaseSalary')?.value || 0),
+          housingAllowance: Number(document.getElementById('approvalHousing')?.value || 0),
+          transportAllowance: Number(document.getElementById('approvalTransport')?.value || 0),
+          otherAllowances: Number(document.getElementById('approvalOther')?.value || 0),
+          salesTarget: Number(document.getElementById('approvalSalesTarget')?.value || 0),
+          commissionRate: Number(document.getElementById('approvalCommissionRate')?.value || 0)
+        };
+
+        const res = await ApiService.approvePendingEmployee(empId, payload);
+        if (res.success) {
+          sound.playSuccess();
+          // 1. إغلاق النافذة المنبثقة فوراً
+          closeApprovalModal();
+
+          // 2. إخفاء وإزالة الصف فوراً من جدول الاعتمادات لضمان اختفائه لحظياً
+          const adminRows = document.querySelectorAll(`[data-action="manager-approve-onboarding"][data-id="${empId}"]`);
+          adminRows.forEach(btn => {
+            const tr = btn.closest('tr');
+            if (tr) {
+              tr.style.transition = 'all 0.3s ease';
+              tr.style.opacity = '0';
+              tr.remove();
+            }
+          });
+
+          const onboardRows = document.querySelectorAll(`[data-action="open-approval"][data-id="${empId}"]`);
+          onboardRows.forEach(btn => {
+            const tr = btn.closest('tr');
+            if (tr) {
+              tr.style.transition = 'all 0.3s ease';
+              tr.style.opacity = '0';
+              tr.remove();
+            }
+          });
+
+          showToast(`تم اعتماد الموظف (${res.employee?.fullName || empId}) وتفعيل حسابه بصلاحية (${payload.role === 'admin' ? 'مدير نظام' : payload.role === 'hr' ? 'مسؤول HR' : 'موظف'}) بنجاح!`, 'success', 5000);
+
+          // 3. تحديث كافة المكونات والجداول
+          await loadEmployees();
+          populateAuthBioSelect();
+          renderQuickLoginShortcuts();
+          updateDemoPinChips();
+          await loadAndRenderAdminRequests();
+          await renderApprovalsTable();
+          refreshPendingApprovalsBadge();
+          updateAdminNotifications();
+          renderEmployeesTable();
+        } else {
+          sound.playError();
+          showToast(res.message, 'error');
+        }
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = originalBtnHtml;
+        }
       }
     });
 
     onboardingRejectBtn?.addEventListener('click', async () => {
       sound.playClick();
-      const empId = document.getElementById('approvalEmpId').value;
+      const empId = document.getElementById('approvalEmpId')?.value;
       if (!empId) return;
       if (confirm('هل أنت متأكد من رفض طلب هذا المرشح نهائياً؟')) {
         const res = await ApiService.rejectPendingEmployee(empId);
         if (res.success) {
           sound.playSuccess();
-          onboardingModal?.classList.add('hidden');
+          closeApprovalModal();
+
+          const adminRows = document.querySelectorAll(`[data-action="manager-approve-onboarding"][data-id="${empId}"]`);
+          adminRows.forEach(btn => btn.closest('tr')?.remove());
+          const onboardRows = document.querySelectorAll(`[data-action="open-approval"][data-id="${empId}"]`);
+          onboardRows.forEach(btn => btn.closest('tr')?.remove());
+
           showToast('تم رفض الطلب بنجاح', 'info');
           await loadEmployees();
-          renderApprovalsTable();
+          populateAuthBioSelect();
+          renderQuickLoginShortcuts();
+          updateDemoPinChips();
+          await loadAndRenderAdminRequests();
+          await renderApprovalsTable();
           refreshPendingApprovalsBadge();
+          updateAdminNotifications();
+        } else {
+          sound.playError();
+          showToast(res.message || 'فشل في رفض الطلب', 'error');
         }
       }
     });
@@ -3659,18 +4011,19 @@
     const allRequests = reqRes?.data || (Array.isArray(reqRes) ? reqRes : []);
 
     const filtered = allRequests.filter(req => {
-      const emp = req.employee || store.state.employees.find(e => e.id === req.employeeId) || {};
+      const emp = req.employee || store.state.employees.find(e => e.id === req.employeeId) || req.details?.rawEmployee || {};
       const empDept = emp.department || '';
 
       if (deptVal !== 'all' && empDept !== deptVal) return false;
-      if (typeVal !== 'all' && req.type !== typeVal) return false;
+      if (typeVal !== 'all' && req.type !== typeVal && req.request_type !== typeVal) return false;
       if (statusVal !== 'all' && req.status !== statusVal) return false;
 
       if (searchVal) {
         const empName = (emp.fullName || '').toLowerCase();
         const empId = (req.employeeId || '').toLowerCase();
+        const empCode = (getEmployeeCode(emp) || '').toLowerCase();
         const reason = (req.reason || '').toLowerCase();
-        if (!empName.includes(searchVal) && !empId.includes(searchVal) && !reason.includes(searchVal)) {
+        if (!empName.includes(searchVal) && !empId.includes(searchVal) && !empCode.includes(searchVal) && !reason.includes(searchVal)) {
           return false;
         }
       }
@@ -3691,8 +4044,73 @@
     }
 
     tbody.innerHTML = filtered.map(req => {
-      const emp = req.employee || store.state.employees.find(e => e.id === req.employeeId) || { fullName: req.employeeId, department: 'عام' };
+      const emp = req.employee || store.state.employees.find(e => e.id === req.employeeId) || req.details?.rawEmployee || { fullName: req.employeeId, department: 'عام' };
       const typeInfo = getRequestTypeDisplayInfo(req.type);
+
+      // حالة طلب انضمام موظف جديد (Onboarding)
+      if (req.type === 'onboarding') {
+        const candidate = emp;
+        const isPending = req.status === 'pending';
+
+        let statusBadgeOnboard = '';
+        if (isPending) {
+          statusBadgeOnboard = '<span class="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800 inline-flex items-center gap-1.5 shadow-sm"><span class="w-1.5 h-1.5 rounded-full bg-amber-500 badge-live-pulse"></span>معلق (بانتظار الاعتماد)</span>';
+        } else if (req.status === 'approved') {
+          statusBadgeOnboard = '<span class="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 inline-flex items-center gap-1"><i class="fa-solid fa-check-double text-[10px]"></i>تم الاعتماد والتفعيل</span>';
+        } else {
+          statusBadgeOnboard = '<span class="px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-300 dark:border-rose-800 inline-flex items-center gap-1"><i class="fa-solid fa-ban text-[10px]"></i>مرفوض</span>';
+        }
+
+        const actionButtonsOnboard = isPending ? `
+          <div class="flex items-center justify-center gap-1.5 flex-wrap">
+            <button type="button" data-action="manager-approve-onboarding" data-id="${escapeHTML(candidate.id)}" class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all active:scale-95" title="اعتماد الموظف وتحديد الصلاحية والراتب">
+              <i class="fa-solid fa-user-check"></i>
+              <span>اعتماد وتعيين</span>
+            </button>
+            <button type="button" data-action="manager-reject-onboarding" data-id="${escapeHTML(candidate.id)}" class="px-2.5 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 hover:bg-rose-100 border border-rose-300 dark:border-rose-900 font-bold text-xs flex items-center gap-1 transition-all" title="رفض طلب الانضمام">
+              <i class="fa-solid fa-ban"></i>
+              <span>رفض</span>
+            </button>
+          </div>
+        ` : `
+          <div class="text-center">
+            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300">
+              <i class="fa-solid fa-circle-check"></i> حساب نشط ومفعل
+            </span>
+          </div>
+        `;
+
+        return `
+          <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors bg-purple-50/20 dark:bg-purple-950/15 border-r-4 border-r-purple-500">
+            <td class="p-3.5">
+              <div class="font-bold text-slate-900 dark:text-white text-xs sm:text-sm flex items-center gap-1.5">
+                <i class="fa-solid fa-user-clock text-purple-600 dark:text-purple-400 text-sm"></i>
+                <span>${escapeHTML(candidate.fullName)}</span>
+              </div>
+              <div class="text-[11px] text-blue-600 dark:text-blue-400 font-mono mt-0.5">
+                ${escapeHTML(getEmployeeCode(candidate))} • ${escapeHTML(candidate.phone || candidate.email || 'غير مسجل')}
+              </div>
+            </td>
+            <td class="p-3.5 text-xs font-bold text-slate-700 dark:text-slate-300">${escapeHTML(candidate.department || 'عام')}</td>
+            <td class="p-3.5">
+              <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-bold bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border-purple-300 dark:border-purple-800">
+                <i class="fa-solid fa-user-plus"></i>
+                <span>طلب انضمام موظف جديد (Onboarding)</span>
+              </div>
+              <div class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                تاريخ التسجيل: <span class="font-mono text-slate-700 dark:text-slate-300">${escapeHTML(req.createdAt || req.submittedAt || '--')}</span>
+              </div>
+            </td>
+            <td class="p-3.5 font-mono text-xs text-slate-600 dark:text-slate-400">${escapeHTML(req.createdAt || req.submittedAt || '--')}</td>
+            <td class="p-3.5 max-w-xs">
+              <div class="text-xs text-slate-800 dark:text-slate-200 font-medium">طلب تسجيل وانضمام لفريق العمل بقسم <strong class="text-purple-600 dark:text-purple-400">${escapeHTML(candidate.department || 'عام')}</strong></div>
+              <div class="text-[11px] text-amber-600 dark:text-amber-400 font-bold mt-0.5"><i class="fa-solid fa-hourglass-half ml-1"></i>بانتظار مراجعة الإدارة وتحديد الراتب والصلاحيات</div>
+            </td>
+            <td class="p-3.5 text-center">${statusBadgeOnboard}</td>
+            <td class="p-3.5 text-center">${actionButtonsOnboard}</td>
+          </tr>
+        `;
+      }
 
       let timingText = '';
       if (req.startDate && req.endDate) {
@@ -3744,7 +4162,7 @@
         <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors">
           <td class="p-3.5">
             <div class="font-bold text-slate-900 dark:text-white text-xs sm:text-sm">${escapeHTML(emp.fullName)}</div>
-            <div class="text-[11px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">${escapeHTML(req.employeeId)}</div>
+            <div class="text-[11px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">${escapeHTML(getEmployeeCode(emp))}</div>
           </td>
           <td class="p-3.5 text-xs font-bold text-slate-700 dark:text-slate-300">${escapeHTML(emp.department || 'عام')}</td>
           <td class="p-3.5">
@@ -3803,11 +4221,23 @@
         `;
       } else {
         notifList.innerHTML = pendingRequests.slice(0, 10).map(req => {
-          const emp = req.employee || store.state.employees.find(e => e.id === req.employeeId) || { fullName: req.employeeId, department: 'عام' };
+          const emp = req.employee || store.state.employees.find(e => e.id === req.employeeId) || req.details?.rawEmployee || { fullName: req.employeeId, department: 'عام' };
           const typeInfo = getRequestTypeDisplayInfo(req.type);
+          const isOnboarding = req.type === 'onboarding';
+
+          const actionBtn = isOnboarding ? `
+            <button type="button" data-action="notif-approve-onboarding" data-id="${escapeHTML(emp.id)}" class="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] shrink-0 self-center transition-all flex items-center gap-1 shadow-sm" title="اعتماد الموظف وتحديد الصلاحية والراتب">
+              <i class="fa-solid fa-user-check text-[10px]"></i>
+              <span>اعتماد وتعيين</span>
+            </button>
+          ` : `
+            <button type="button" data-action="notif-approve-req" data-id="${escapeHTML(req.id)}" class="px-2 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] shrink-0 self-center transition-all" title="اتخاذ قرار">
+              بت في الطلب
+            </button>
+          `;
 
           return `
-            <div class="p-3 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors flex items-start justify-between gap-2.5">
+            <div class="p-3 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors flex items-start justify-between gap-2.5 ${isOnboarding ? 'bg-purple-50/30 dark:bg-purple-950/20' : ''}">
               <div class="flex items-start gap-2.5 flex-1 min-w-0">
                 <div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border ${typeInfo.bgClass} text-xs">
                   <i class="fa-solid ${typeInfo.icon}"></i>
@@ -3823,9 +4253,7 @@
                   <p class="text-[11px] text-slate-500 italic truncate mt-0.5">${escapeHTML(req.reason || '')}</p>
                 </div>
               </div>
-              <button type="button" data-action="manager-approve-req" data-id="${escapeHTML(req.id)}" class="px-2 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] shrink-0 self-center transition-all" title="اتخاذ قرار">
-                بت في الطلب
-              </button>
+              ${actionBtn}
             </div>
           `;
         }).join('');
@@ -3841,10 +4269,16 @@
     if (!tbody) return;
 
     const pending = await ApiService.getPendingEmployees();
-    refreshPendingApprovalsBadge(pending.length);
 
     const subTabOnboardBadge = document.getElementById('subTabOnboardingBadge');
-    if (subTabOnboardBadge) subTabOnboardBadge.textContent = pending.length;
+    if (subTabOnboardBadge) {
+      subTabOnboardBadge.textContent = pending.length;
+      if (pending.length > 0) {
+        subTabOnboardBadge.className = 'px-2 py-0.5 rounded-full bg-amber-500 text-white text-[11px] font-mono font-black animate-pulse';
+      } else {
+        subTabOnboardBadge.className = 'px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-[11px] font-mono font-bold';
+      }
+    }
 
     if (pending.length === 0) {
       tbody.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-xs text-slate-500 font-medium">لا توجد طلبات موظفين جديدة في الانتظار حالياً</td></tr>`;
@@ -3858,13 +4292,13 @@
             <div class="font-bold text-slate-900 dark:text-white text-xs sm:text-sm">${escapeHTML(c.fullName)}</div>
             <div class="text-[11px] text-blue-600 dark:text-blue-400 font-mono mt-0.5">${escapeHTML(c.email || 'غير مسجل')} • ${escapeHTML(c.phone || '')}</div>
           </td>
-          <td class="p-3 font-mono font-black text-blue-600 dark:text-blue-400 text-xs sm:text-sm">${escapeHTML(c.id)}</td>
+          <td class="p-3 font-mono font-black text-blue-600 dark:text-blue-400 text-xs sm:text-sm">${escapeHTML(getEmployeeCode(c))}</td>
           <td class="p-3 font-bold text-slate-700 dark:text-slate-300 text-xs">${escapeHTML(c.department || 'عام')}</td>
-          <td class="p-3 font-mono text-xs text-slate-600 dark:text-slate-400">${escapeHTML(c.hireDate || 'اليوم')}</td>
+          <td class="p-3 font-mono text-xs text-slate-600 dark:text-slate-400">${escapeHTML(c.hireDate || c.registeredAt?.split('T')[0] || 'اليوم')}</td>
           <td class="p-3">
             <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800 flex items-center gap-1 w-max">
               <span class="w-1.5 h-1.5 rounded-full bg-amber-500 badge-live-pulse"></span>
-              قيد المراجعة
+              قيد المراجعة والاعتماد
             </span>
           </td>
           <td class="p-3 text-center">
@@ -3890,8 +4324,9 @@
   async function refreshPendingApprovalsBadge(count = null) {
     let pendingCount = count;
     if (pendingCount === null) {
-      const pending = await ApiService.getPendingEmployees();
-      pendingCount = pending.length;
+      const pendingRes = await ApiService.getRequests({ status: 'pending' });
+      const pendingReqs = pendingRes?.data || (Array.isArray(pendingRes) ? pendingRes : []);
+      pendingCount = pendingReqs.length;
     }
     const badge = document.getElementById('pendingApprovalsBadge');
     if (badge) badge.textContent = `${pendingCount} معلق`;
@@ -3949,11 +4384,7 @@
 
       setTimeout(async () => {
         scannerWidget?.classList.remove('scanning');
-        const punchDate = store.state.currentDate || new Date().toISOString().split('T')[0];
-        const res = await ApiService.punchAttendance({ 
-          employeeId: selectedEmpId,
-          date: punchDate
-        });
+        const res = await ApiService.loginWithFingerprint(selectedEmpId, true);
         handlePunchResult(res);
       }, 700);
     };
@@ -4022,16 +4453,12 @@
 
   async function submitPinPunch() {
     const pin = store.state.pinInput;
-    const punchDate = store.state.currentDate || new Date().toISOString().split('T')[0];
-    const res = await ApiService.punchAttendance({ 
-      pin,
-      date: punchDate
-    });
+    const res = await ApiService.loginWithPin(pin, true);
     if (!res.success) {
       sound.playError();
       const container = document.getElementById('pinDotsContainer');
       container?.classList.add('shake');
-      showToast(res.message, 'error', 3000);
+      showToast(res.message || 'رمز PIN غير صحيح', 'error', 3000);
       setTimeout(() => {
         container?.classList.remove('shake');
         resetPin();
@@ -4045,80 +4472,56 @@
   function handlePunchResult(res) {
     if (!res.success) {
       sound.playError();
-      showToast(res.message, 'error', 4000);
+      showToast(res.message || 'فشل التحقق من الهوية', 'error', 4000);
       return;
     }
 
     sound.playSuccess();
-    showToast(res.message, 'success', 3500);
+    const user = res.user || res.data?.user || res.employee || res.data?.employee;
+    showToast(`تم تسجيل الدخول بنجاح! مرحباً بك يا ${user?.fullName || ''}`, 'success', 3500);
 
-    // Refresh Attendance Logs
-    loadAttendanceLogs();
-
-    // Update Kiosk Result Card & Open Confirmation Modal
+    // Update Result Card & Open Confirmation Modal
     renderPunchResultCard(res);
     openPunchConfirmModal(res);
-
-    // Update Dashboard if visible
-    renderDashboard();
   }
 
   function renderPunchResultCard(res) {
     const card = document.getElementById('punchResultCard');
     const badge = document.getElementById('punchResultBadge');
     const content = document.getElementById('punchResultContent');
-    const emp = res.employee;
-    const isCheckIn = res.punchType === 'check_in';
+    const emp = res.user || res.data?.user || res.employee || res.data?.employee;
 
     if (!card || !badge || !content || !emp) return;
 
-    card.className = `glass-panel rounded-2xl p-6 shadow-xl border-l-4 ${isCheckIn ? 'border-l-emerald-500' : 'border-l-blue-500'} transition-all duration-300 bg-white dark:bg-slate-900`;
-    badge.className = `px-2.5 py-1 rounded-full text-xs font-bold ${isCheckIn ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300' : 'bg-blue-100 text-blue-800 dark:bg-blue-950/80 dark:text-blue-300'}`;
-    badge.textContent = isCheckIn ? 'حضور معتمد (Check-In)' : 'انصراف معتمد (Check-Out)';
-
-    let extraBadge = '';
-    if (isCheckIn) {
-      if (res.lateMinutes > 0) {
-        extraBadge = `<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800">تأخير: ${res.lateMinutes} دقيقة</span>`;
-      } else {
-        extraBadge = `<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">حضور منتظم في الموعد</span>`;
-      }
-    } else {
-      if (res.overtimeHours > 0) {
-        extraBadge = `<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300">ساعات إضافية: ${res.overtimeHours} س</span>`;
-      } else if (res.earlyLeaveMinutes > 0) {
-        extraBadge = `<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300">انصراف مبكر: ${res.earlyLeaveMinutes} د</span>`;
-      } else {
-        extraBadge = `<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">ساعات مكتملة: ${res.actualHours} س</span>`;
-      }
-    }
+    card.className = 'glass-panel rounded-2xl p-6 shadow-xl border-l-4 border-l-emerald-500 transition-all duration-300 bg-white dark:bg-slate-900';
+    badge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300';
+    badge.textContent = 'تم تسجيل الدخول بنجاح';
 
     content.innerHTML = `
       <div class="flex items-center gap-4 text-right mb-4">
-        <img src="${escapeHTML(emp.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150')}" alt="${escapeHTML(emp.fullName)}" class="w-16 h-16 rounded-xl object-cover border-2 border-blue-500 shadow-md">
+        <img src="${escapeHTML(emp.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150')}" alt="${escapeHTML(emp.fullName)}" class="w-16 h-16 rounded-xl object-cover border-2 border-emerald-500 shadow-md">
         <div>
           <h4 class="text-base font-black text-slate-900 dark:text-white">${escapeHTML(emp.fullName)}</h4>
-          <p class="text-xs text-slate-600 dark:text-slate-400 font-medium">${escapeHTML(emp.jobTitle)} • ${escapeHTML(emp.department)}</p>
+          <p class="text-xs text-slate-600 dark:text-slate-400 font-medium">${escapeHTML(emp.jobTitle || 'موظف')} • ${escapeHTML(emp.department || '')}</p>
           <div class="flex items-center gap-2 mt-1">
-            <span class="text-xs font-mono font-bold text-blue-600 dark:text-blue-400">${escapeHTML(emp.id)}</span>
-            ${extraBadge}
+            <span class="text-xs font-mono font-bold text-blue-600 dark:text-blue-400">${escapeHTML(getEmployeeCode(emp))}</span>
+            <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">تسجيل دخول موثق</span>
           </div>
         </div>
       </div>
       <div class="p-3 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs text-slate-800 dark:text-slate-200 text-right">
         <div class="flex justify-between items-center mb-1">
-          <span class="text-slate-600 dark:text-slate-400 font-bold">الوقت المسجل:</span>
-          <span class="font-bold font-mono text-slate-900 dark:text-white text-sm">${escapeHTML(res.timestamp)}</span>
+          <span class="text-slate-600 dark:text-slate-400 font-bold">وقت الدخول:</span>
+          <span class="font-bold font-mono text-slate-900 dark:text-white text-sm">${new Date().toLocaleTimeString('ar-EG')}</span>
         </div>
-        <p class="text-[11px] text-slate-600 dark:text-slate-300 mt-1">${escapeHTML(res.message)}</p>
+        <p class="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold mt-1">تم التحقق من الهوية وتسجيل الدخول بنجاح (مستقل تماماً عن سجلات الحضور والانصراف).</p>
       </div>
     `;
   }
 
   function openPunchConfirmModal(res) {
     const modal = document.getElementById('punchConfirmModal');
-    const isCheckIn = res.punchType === 'check_in';
-    const emp = res.employee;
+    const emp = res.user || res.data?.user || res.employee || res.data?.employee;
 
     const iconBg = document.getElementById('modalPunchIconBg');
     const icon = document.getElementById('modalPunchIcon');
@@ -4127,29 +4530,23 @@
 
     if (!modal || !emp) return;
 
-    if (isCheckIn) {
-      if (iconBg) iconBg.className = 'w-16 h-16 sm:w-20 sm:h-20 rounded-full mx-auto mb-4 bg-emerald-100 dark:bg-emerald-950/70 text-emerald-600 flex items-center justify-center text-3xl sm:text-4xl shadow-inner';
-      if (icon) icon.className = 'fa-solid fa-arrow-right-to-bracket';
-      if (title) title.textContent = 'تم تسجيل الحضور بنجاح';
-    } else {
-      if (iconBg) iconBg.className = 'w-16 h-16 sm:w-20 sm:h-20 rounded-full mx-auto mb-4 bg-blue-100 dark:bg-blue-950/70 text-blue-600 flex items-center justify-center text-3xl sm:text-4xl shadow-inner';
-      if (icon) icon.className = 'fa-solid fa-arrow-right-from-bracket';
-      if (title) title.textContent = 'تم تسجيل الانصراف بنجاح';
-    }
+    if (iconBg) iconBg.className = 'w-16 h-16 sm:w-20 sm:h-20 rounded-full mx-auto mb-4 bg-emerald-100 dark:bg-emerald-950/70 text-emerald-600 flex items-center justify-center text-3xl sm:text-4xl shadow-inner';
+    if (icon) icon.className = 'fa-solid fa-circle-check';
+    if (title) title.textContent = 'تم تسجيل الدخول بنجاح';
+    if (msg) msg.textContent = `تم التحقق بنجاح من بيانات المستخدم (${emp.fullName}) وتسجيل الدخول للنظام.`;
 
-    if (msg) msg.textContent = res.message;
-    document.getElementById('modalPunchEmpName').textContent = emp.fullName;
-    document.getElementById('modalPunchEmpId').textContent = emp.id;
-    document.getElementById('modalPunchEmpDept').textContent = emp.department;
-    document.getElementById('modalPunchTime').textContent = res.timestamp;
+    const nameEl = document.getElementById('modalPunchEmpName');
+    if (nameEl) nameEl.textContent = emp.fullName;
+    const idEl = document.getElementById('modalPunchEmpId');
+    if (idEl) idEl.textContent = getEmployeeCode(emp);
+    const deptEl = document.getElementById('modalPunchEmpDept');
+    if (deptEl) deptEl.textContent = emp.department;
+    const timeEl = document.getElementById('modalPunchTime');
+    if (timeEl) timeEl.textContent = new Date().toLocaleTimeString('ar-EG');
 
     const detailRow = document.getElementById('modalPunchDetail');
     if (detailRow) {
-      if (isCheckIn) {
-        detailRow.textContent = res.lateMinutes > 0 ? `تأخير ${res.lateMinutes} دقيقة` : 'حضور في الموعد المحدد';
-      } else {
-        detailRow.textContent = res.overtimeHours > 0 ? `عمل إضافي ${res.overtimeHours} ساعة` : `ساعات العمل: ${res.actualHours} ساعة`;
-      }
+      detailRow.textContent = 'تسجيل دخول ناجح (مستقل عن الحضور والانصراف)';
     }
 
     modal.classList.remove('hidden');
@@ -5798,7 +6195,8 @@
       emps.forEach(emp => {
         const opt = document.createElement('option');
         opt.value = emp.fullName;
-        opt.textContent = `${emp.fullName} (${emp.id} - ${emp.jobTitle || 'موظف'})`;
+        const code = getEmployeeCode(emp);
+        opt.textContent = `${emp.fullName} (${code} - ${emp.jobTitle || 'موظف'})`;
         if (emp.fullName === selectedManager) opt.selected = true;
         managerSelect.appendChild(opt);
       });
