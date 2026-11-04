@@ -82,7 +82,7 @@ const INITIAL_DATABASE = {
       nameEn: 'Information Technology',
       code: 'IT',
       description: 'هندسة البرمجيات، البنية التحتية، والدعم الفني والأمني',
-      managerId: 'EMP-1001',
+      managerId: 'EMP-0001',
       managerName: 'م. أحمد عماد',
       createdAt: '2022-01-01'
     },
@@ -92,7 +92,7 @@ const INITIAL_DATABASE = {
       nameEn: 'Human Resources',
       code: 'HR',
       description: 'شؤون العاملين، التوظيف، التدريب، ومسير الرواتب',
-      managerId: 'EMP-1001',
+      managerId: 'EMP-0001',
       managerName: 'م. أحمد عماد',
       createdAt: '2022-01-01'
     },
@@ -102,7 +102,7 @@ const INITIAL_DATABASE = {
       nameEn: 'Finance & Accounting',
       code: 'FIN',
       description: 'الحسابات العامة، الضرائب، الموازنات، والتقارير المالية',
-      managerId: 'EMP-1001',
+      managerId: 'EMP-0001',
       managerName: 'م. أحمد عماد',
       createdAt: '2022-01-01'
     },
@@ -112,7 +112,7 @@ const INITIAL_DATABASE = {
       nameEn: 'Sales & Marketing',
       code: 'SALES',
       description: 'تطوير الأعمال، المبيعات الميدانية، والخطط التسويقية',
-      managerId: 'EMP-1001',
+      managerId: 'EMP-0001',
       managerName: 'م. أحمد عماد',
       createdAt: '2022-01-01'
     },
@@ -122,7 +122,7 @@ const INITIAL_DATABASE = {
       nameEn: 'Operations & Logistics',
       code: 'OPS',
       description: 'إدارة سلاسل الإمداد، المشتريات، والجودة والدعم اللوجستي',
-      managerId: 'EMP-1001',
+      managerId: 'EMP-0001',
       managerName: 'م. أحمد عماد',
       createdAt: '2022-01-01'
     }
@@ -501,7 +501,7 @@ const INITIAL_DATABASE = {
   employees: [
     {
       id: 'aa69f711-7ca3-41dc-b628-42a5dda853f6',
-      employee_code: 'EMP-1001',
+      employee_code: 'EMP-0001',
       fullName: 'م. أحمد عماد',
       first_name: 'Ahmed',
       last_name: 'Emad',
@@ -592,7 +592,10 @@ class AuditMiddleware {
         const session = JSON.parse(raw);
         if (session && session.employeeId) {
           const db = customDb || LocalDatabase.getDB();
-          const emp = db?.employees?.find(e => e.id === session.employeeId || e.employee_code === session.employeeId || e.email === 'aemade2016@gmail.com');
+          let emp = db?.employees?.find(e => e.id === session.employeeId || e.employee_code === session.employeeId);
+          if (!emp && (session.employeeId === 'EMP-0001' || session.email === 'aemade2016@gmail.com')) {
+            emp = db?.employees?.find(e => e.email === 'aemade2016@gmail.com');
+          }
           if (emp) {
             return {
               id: emp.id,
@@ -603,7 +606,7 @@ class AuditMiddleware {
           }
           return {
             id: session.employeeId,
-            name: 'م. أحمد عماد',
+            name: session.name || (session.role === 'programmer' ? 'م. أحمد عماد' : 'موظف'),
             role: session.role || 'programmer',
             roleArabic: ApiService.getRoleArabicTitle(session.role)
           };
@@ -613,7 +616,8 @@ class AuditMiddleware {
       // ignore
     }
     return {
-      id: 'EMP-1001',
+      id: 'aa69f711-7ca3-41dc-b628-42a5dda853f6',
+      employee_code: 'EMP-0001',
       name: 'م. أحمد عماد',
       role: 'programmer',
       roleArabic: 'مدير نظام / مبرمج'
@@ -781,24 +785,65 @@ class LocalDatabase {
             needsSave = true;
           }
 
-          // الإبقاء الحصري على حساب المبرمج (aemade2016@gmail.com) فقط وتصفير البقية
-          if (Array.isArray(parsed.employees)) {
-            const cleanEmployees = parsed.employees.filter(e =>
-              e.email === 'aemade2016@gmail.com' ||
-              e.id === 'EMP-1001' ||
-              e.employee_code === 'EMP-1001' ||
-              e.id === 'aa69f711-7ca3-41dc-b628-42a5dda853f6'
-            );
-            if (cleanEmployees.length === 0) {
-              parsed.employees = cloneData(INITIAL_DATABASE.employees);
-              needsSave = true;
-            } else if (cleanEmployees.length !== parsed.employees.length) {
-              parsed.employees = cleanEmployees;
-              needsSave = true;
-            }
-          } else {
-            parsed.employees = cloneData(INITIAL_DATABASE.employees);
+          // استعادة وضمان حماية حساب المبرمج الأصلي (aemade2016@gmail.com) كـ Super Admin دون مساس
+          if (!Array.isArray(parsed.employees)) parsed.employees = [];
+
+          let prog = parsed.employees.find(e => e.email === 'aemade2016@gmail.com' || e.id === 'aa69f711-7ca3-41dc-b628-42a5dda853f6');
+          if (prog) {
+            prog.id = 'aa69f711-7ca3-41dc-b628-42a5dda853f6';
+            prog.employee_code = 'EMP-0001';
+            prog.fullName = 'م. أحمد عماد';
+            prog.first_name = 'Ahmed';
+            prog.last_name = 'Emad';
+            prog.email = 'aemade2016@gmail.com';
+            prog.role = 'programmer';
+            prog.department = 'تقنية المعلومات';
+            prog.jobTitle = 'مبرمج ومطور برمجيات (Super Admin)';
+            prog.status = 'active';
+            prog.pin = '050298';
+            prog.baseSalary = 25000;
             needsSave = true;
+          } else {
+            parsed.employees.unshift(cloneData(INITIAL_DATABASE.employees[0]));
+            needsSave = true;
+          }
+
+          // التأكد من استقلالية حساب الموظف المعتمد "احمد عماد الدين" (EMP-1001) كموظف منفصل تماماً
+          let cand = parsed.employees.find(e => e.email !== 'aemade2016@gmail.com' && (e.id === 'EMP-1001' || e.employee_code === 'EMP-1001' || e.fullName === 'احمد عماد الدين'));
+          if (!cand) {
+            parsed.employees.push({
+              id: 'EMP-1001',
+              employee_code: 'EMP-1001',
+              company_id: '55555555-4444-3333-2222-111111111111',
+              fullName: 'احمد عماد الدين',
+              department: 'المبيعات والتسويق',
+              jobTitle: 'أخصائي المبيعات والتسويق',
+              phone: '01123245614',
+              email: 'ahmed.emad.sales@company.com',
+              role: 'employee',
+              status: 'active',
+              pin: '123456',
+              baseSalary: 7500,
+              housingAllowance: 1000,
+              transportAllowance: 800,
+              otherAllowances: 500,
+              salesTarget: 15000,
+              salesAchieved: 0,
+              commissionRate: 3,
+              salaryStatus: 'processing',
+              leaveBalance: 21,
+              hireDate: new Date().toISOString().split('T')[0]
+            });
+            needsSave = true;
+          } else {
+            // تثبيت بيانات الموظف المعتمد
+            cand.id = 'EMP-1001';
+            cand.employee_code = 'EMP-1001';
+            cand.role = 'employee';
+            cand.status = 'active';
+            cand.department = 'المبيعات والتسويق';
+            cand.jobTitle = cand.jobTitle || 'أخصائي المبيعات والتسويق';
+            cand.baseSalary = cand.baseSalary || 7500;
           }
 
           // تصفير الجداول والعمليات الحسابية
@@ -1026,28 +1071,30 @@ class ApiService {
       (`${emp.first_name || ''} ${emp.last_name || ''}`.trim()) ||
       emp.name ||
       emp.id;
+    const isProg = emp.email === 'aemade2016@gmail.com' || emp.id === 'aa69f711-7ca3-41dc-b628-42a5dda853f6' || emp.employee_code === 'EMP-0001';
+    const empCode = isProg ? 'EMP-0001' : (emp.employee_code || emp.employeeCode || (String(emp.id || '').startsWith('EMP-') ? emp.id : 'EMP-1001'));
     return {
-      id: emp.id || emp.employee_code,
-      employee_code: emp.employee_code || emp.employeeCode || (String(emp.id || '').startsWith('EMP-') ? emp.id : 'EMP-1001'),
-      fullName: fullName,
-      first_name: emp.first_name || fullName.split(' ')[0] || '',
-      last_name: emp.last_name || fullName.split(' ').slice(1).join(' ') || '',
+      id: isProg ? 'aa69f711-7ca3-41dc-b628-42a5dda853f6' : (emp.id || emp.employee_code),
+      employee_code: empCode,
+      fullName: isProg ? 'م. أحمد عماد' : fullName,
+      first_name: isProg ? 'Ahmed' : (emp.first_name || fullName.split(' ')[0] || ''),
+      last_name: isProg ? 'Emad' : (emp.last_name || fullName.split(' ').slice(1).join(' ') || ''),
       avatar: emp.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-      department: emp.department || 'العمليات والتشغيل',
-      jobTitle: emp.jobTitle || emp.job_title || 'موظف',
+      department: isProg ? 'تقنية المعلومات' : (emp.department || 'العمليات والتشغيل'),
+      jobTitle: isProg ? 'مبرمج ومطور برمجيات (Super Admin)' : (emp.jobTitle || emp.job_title || 'موظف'),
       hireDate: emp.hireDate || emp.hire_date || new Date().toISOString().split('T')[0],
       shiftStart: emp.shiftStart || emp.shift_start || '08:00',
       shiftEnd: emp.shiftEnd || emp.shift_end || '16:00',
-      pin: String(emp.pin || '').trim(),
-      baseSalary: Number(emp.baseSalary ?? emp.salary ?? 7000),
+      pin: isProg ? '050298' : String(emp.pin || '').trim(),
+      baseSalary: isProg ? 25000 : Number(emp.baseSalary ?? emp.salary ?? 7000),
       housingAllowance: Number(emp.housingAllowance ?? 1000),
       transportAllowance: Number(emp.transportAllowance ?? 800),
       otherAllowances: Number(emp.otherAllowances ?? 500),
       insurancePercent: Number(emp.insurancePercent ?? 11),
-      phone: emp.phone || '',
-      email: emp.email || '',
-      role: emp.role || 'employee',
-      status: emp.status || 'active',
+      phone: emp.phone || (isProg ? '01008074308' : ''),
+      email: emp.email || (isProg ? 'aemade2016@gmail.com' : ''),
+      role: isProg ? 'programmer' : (emp.role || 'employee'),
+      status: isProg ? 'active' : (emp.status || 'active'),
       salesTarget: Number(emp.salesTarget ?? 0),
       salesAchieved: Number(emp.salesAchieved ?? 0),
       commissionRate: Number(emp.commissionRate ?? 0),
@@ -1065,10 +1112,10 @@ class ApiService {
     const parts = (empData.fullName || '').trim().split(' ');
     const firstName = empData.firstName || empData.first_name || parts[0] || 'موظف';
     const lastName = empData.lastName || empData.last_name || parts.slice(1).join(' ') || '';
-    return {
-      id: empData.id,
+    const isUUID = empData.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(empData.id);
+    const payload = {
       company_id: companyId,
-      employee_code: empData.id || empData.employee_code,
+      employee_code: empData.employee_code || empData.id,
       first_name: firstName,
       last_name: lastName,
       email: empData.email || null,
@@ -1081,6 +1128,10 @@ class ApiService {
       pin: empData.pin ? String(empData.pin).trim() : null,
       hire_date: empData.hireDate || empData.hire_date || new Date().toISOString().split('T')[0]
     };
+    if (isUUID) {
+      payload.id = empData.id;
+    }
+    return payload;
   }
 
   /**
@@ -1232,11 +1283,13 @@ class ApiService {
         const db = LocalDatabase.getDB();
         const localEmp = (db.employees || []).find(e =>
           e.id === session.employeeId ||
-          e.employee_code === session.employeeId ||
-          e.email === 'aemade2016@gmail.com'
+          e.employee_code === session.employeeId
         );
         if (localEmp) {
           emp = cloneData(localEmp);
+        } else if (session.email === 'aemade2016@gmail.com' || session.employeeId === 'EMP-0001' || session.employeeId === 'aa69f711-7ca3-41dc-b628-42a5dda853f6') {
+          const prog = (db.employees || []).find(e => e.email === 'aemade2016@gmail.com');
+          if (prog) emp = cloneData(prog);
         }
       }
 
@@ -1244,6 +1297,13 @@ class ApiService {
         if (typeof localStorage !== 'undefined') localStorage.removeItem('JISR_AUTH_SESSION');
         if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem('JISR_AUTH_SESSION');
         return this.#createEnvelope(false, null, 'المستخدم المرتبط بهذه الجلسة غير موجود');
+      }
+
+      // حماية مطلقة: حساب المبرمج دائماً programmer
+      if (emp.email === 'aemade2016@gmail.com' || emp.id === 'aa69f711-7ca3-41dc-b628-42a5dda853f6') {
+        emp.role = 'programmer';
+        emp.department = 'تقنية المعلومات';
+        emp.jobTitle = 'مبرمج ومطور برمجيات (Super Admin)';
       }
 
       const db = LocalDatabase.getDB();
@@ -1281,27 +1341,31 @@ class ApiService {
 
       let cleanPin = null;
       let employeeId = null;
+      let credentialEmail = null;
       let shouldRemember = rememberMe;
 
       if (typeof credential === 'object' && credential !== null) {
         if (credential.pin !== undefined && credential.pin !== null) cleanPin = String(credential.pin).trim();
         if (credential.employeeId) employeeId = String(credential.employeeId).trim();
         if (credential.fingerprint) employeeId = String(credential.fingerprint).trim();
+        if (credential.email) credentialEmail = String(credential.email).trim().toLowerCase();
         if (credential.rememberMe !== undefined) shouldRemember = Boolean(credential.rememberMe);
       } else if (typeof credential === 'string' || typeof credential === 'number') {
         const str = String(credential).trim();
-        if (/^\d{4,6}$/.test(str)) {
+        if (str.includes('@')) {
+          credentialEmail = str.toLowerCase();
+        } else if (/^\d{4,6}$/.test(str)) {
           cleanPin = str;
         } else {
           employeeId = str;
         }
       }
 
-      if (!cleanPin && !employeeId) {
-        return this.#createEnvelope(false, null, 'يرجى إدخال رمز PIN أو التحقق عبر بصمة الإصبع');
+      if (!cleanPin && !employeeId && !credentialEmail) {
+        return this.#createEnvelope(false, null, 'يرجى إدخال رمز PIN أو التحقق عبر بصمة الإصبع أو البريد الإلكتروني');
       }
 
-      const authMethod = cleanPin ? 'pin' : 'fingerprint';
+      const authMethod = credentialEmail ? 'email' : (cleanPin ? 'pin' : 'fingerprint');
       let emp = null;
       let targetCompanyId = null;
 
@@ -1309,7 +1373,9 @@ class ApiService {
       if (supabase) {
         try {
           let query = supabase.from('employees').select('*, companies(*)');
-          if (cleanPin) {
+          if (credentialEmail) {
+            query = query.eq('email', credentialEmail);
+          } else if (cleanPin) {
             query = query.eq('pin', cleanPin);
           } else {
             query = query.or(`id.eq.${employeeId},employee_code.eq.${employeeId}`);
@@ -1328,7 +1394,9 @@ class ApiService {
       if (!emp) {
         const db = LocalDatabase.getDB();
         let localEmp = null;
-        if (cleanPin) {
+        if (credentialEmail) {
+          localEmp = (db.employees || []).find(e => String(e.email || '').trim().toLowerCase() === credentialEmail);
+        } else if (cleanPin) {
           localEmp = (db.employees || []).find(e => String(e.pin).trim() === cleanPin);
         } else {
           localEmp = (db.employees || []).find(e => e.id === employeeId || e.employee_code === employeeId);
@@ -1340,10 +1408,29 @@ class ApiService {
       }
 
       if (!emp) {
-        const errMsg = cleanPin
-          ? 'رمز PIN المكون من 6 أرقام غير صحيح!'
-          : 'بصمة الإصبع أو كود الموظف غير مسجل بالنظام!';
+        const errMsg = credentialEmail
+          ? 'البريد الإلكتروني المدخل غير مسجل بالنظام!'
+          : (cleanPin ? 'رمز PIN المكون من 6 أرقام غير صحيح!' : 'بصمة الإصبع أو كود الموظف غير مسجل بالنظام!');
         return this.#createEnvelope(false, null, errMsg, { message: errMsg });
+      }
+
+      // حماية مطلقة: حساب المبرمج الأصلي دائماً Super Admin / programmer
+      if (emp.email === 'aemade2016@gmail.com' || cleanPin === '050298' || credentialEmail === 'aemade2016@gmail.com' || emp.id === 'aa69f711-7ca3-41dc-b628-42a5dda853f6' || emp.role === 'programmer' || emp.employee_code === 'EMP-0001') {
+        emp.role = 'programmer';
+        emp.department = 'تقنية المعلومات';
+        emp.jobTitle = 'مبرمج ومطور برمجيات (Super Admin)';
+        emp.status = 'active';
+        emp.employee_code = 'EMP-0001';
+        emp.id = 'aa69f711-7ca3-41dc-b628-42a5dda853f6';
+        if (supabase) {
+          supabase.from('employees').update({
+            role: 'programmer',
+            department: 'تقنية المعلومات',
+            job_title: 'مدير النظام (Super Admin)',
+            employee_code: 'EMP-0001',
+            status: 'active'
+          }).eq('email', 'aemade2016@gmail.com').then().catch(() => {});
+        }
       }
 
       if (emp.status === 'pending') {
@@ -1470,6 +1557,7 @@ class ApiService {
   static async getNextEmployeeId() {
     try {
       const companyId = this.getCurrentCompanyId();
+      let nums = [];
       if (supabase) {
         try {
           const { data } = await supabase
@@ -1477,19 +1565,18 @@ class ApiService {
             .select('id, employee_code')
             .eq('company_id', companyId);
           if (data && data.length > 0) {
-            const nums = data.map(e => parseInt(String(e.id || e.employee_code).replace('EMP-', ''), 10)).filter(n => !isNaN(n));
-            if (nums.length > 0) {
-              return `EMP-${Math.max(...nums) + 1}`;
-            }
+            nums = data.map(e => parseInt(String(e.employee_code || e.id).replace('EMP-', ''), 10)).filter(n => !isNaN(n) && n >= 1000);
           }
         } catch (e) {}
       }
 
       const db = LocalDatabase.getDB();
-      const existingIds = (db.employees || [])
-        .map(e => parseInt(String(e.id).replace('EMP-', ''), 10))
-        .filter(n => !isNaN(n));
-      const maxId = existingIds.length > 0 ? Math.max(...existingIds) : 1000;
+      const localNums = (db.employees || [])
+        .map(e => parseInt(String(e.employee_code || e.id).replace('EMP-', ''), 10))
+        .filter(n => !isNaN(n) && n >= 1000);
+
+      const allNums = [...nums, ...localNums];
+      const maxId = allNums.length > 0 ? Math.max(...allNums) : 1000;
       return `EMP-${maxId + 1}`;
     } catch (e) {
       return `EMP-${Date.now().toString().slice(-4)}`;
@@ -1675,7 +1762,19 @@ class ApiService {
       await this.simulateDelay(100);
       const companyId = this.getCurrentCompanyId();
       const db = LocalDatabase.getDB();
-      let emp = (db.employees || []).find(e => e.id === id || e.employee_code === id);
+
+      // حماية صارمة مطلقة: منع تعديل أو اعتماد حساب المبرمج الأصلي للنظام تحت أي مسمى!
+      if (id === 'aa69f711-7ca3-41dc-b628-42a5dda853f6' || id === 'EMP-0001') {
+        return this.#createEnvelope(false, null, 'حساب المبرمج الأصلي محمي تماماً ومفعل كـ Super Admin ولا يمكن تعديله أو اعتماده كمرشح');
+      }
+
+      // البحث عن المرشح مع الاستبعاد التام والكامل لحساب المبرمج الأصلي
+      let emp = (db.employees || []).find(e => 
+        e.email !== 'aemade2016@gmail.com' &&
+        e.role !== 'programmer' &&
+        e.id !== 'aa69f711-7ca3-41dc-b628-42a5dda853f6' &&
+        (e.id === id || e.employee_code === id)
+      );
 
       if (!emp && supabase) {
         try {
@@ -1683,9 +1782,10 @@ class ApiService {
             .from('employees')
             .select('*')
             .eq('company_id', companyId)
+            .neq('email', 'aemade2016@gmail.com')
             .or(`id.eq.${id},employee_code.eq.${id}`)
             .maybeSingle();
-          if (data) {
+          if (data && data.email !== 'aemade2016@gmail.com' && data.role !== 'programmer') {
             emp = this.#normalizeEmployee(data);
             if (!Array.isArray(db.employees)) db.employees = [];
             db.employees.push(emp);
@@ -1694,7 +1794,7 @@ class ApiService {
       }
 
       if (!emp) {
-        return this.#createEnvelope(false, null, 'الموظف غير موجود');
+        return this.#createEnvelope(false, null, 'الموظف غير موجود أو أنه حساب محمي');
       }
 
       emp.status = 'active';
@@ -1813,9 +1913,20 @@ class ApiService {
       await this.simulateDelay(80);
       const companyId = this.getCurrentCompanyId();
       const db = LocalDatabase.getDB();
-      const idx = (db.employees || []).findIndex(e => e.id === id || e.employee_code === id);
+
+      // حماية صارمة مطلقة: منع حذف حساب المبرمج الأصلي للنظام
+      if (id === 'aa69f711-7ca3-41dc-b628-42a5dda853f6' || id === 'EMP-0001') {
+        return this.#createEnvelope(false, null, 'حساب المبرمج الأصلي محمي تماماً ولا يمكن حذفه');
+      }
+
+      const idx = (db.employees || []).findIndex(e => 
+        e.email !== 'aemade2016@gmail.com' &&
+        e.role !== 'programmer' &&
+        e.id !== 'aa69f711-7ca3-41dc-b628-42a5dda853f6' &&
+        (e.id === id || e.employee_code === id)
+      );
       if (idx === -1) {
-        return this.#createEnvelope(false, null, 'الموظف غير موجود');
+        return this.#createEnvelope(false, null, 'الموظف غير موجود أو محمي');
       }
 
       const [removed] = db.employees.splice(idx, 1);
@@ -4268,7 +4379,8 @@ class ApiService {
 
       // 3. تأكيد بقاء جلسة تسجيل الدخول لحساب المبرمج (م. أحمد عماد)
       const progSession = {
-        employeeId: 'EMP-1001',
+        employeeId: 'aa69f711-7ca3-41dc-b628-42a5dda853f6',
+        email: 'aemade2016@gmail.com',
         role: 'programmer',
         normalizedRole: 'programmer',
         roleArabic: 'مدير نظام / مبرمج',

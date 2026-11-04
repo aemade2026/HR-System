@@ -395,6 +395,15 @@
     const res = await ApiService.getEmployees();
     if (res.success) {
       store.state.employees = res.data;
+      if (store.state.currentUser) {
+        const fresh = res.data.find(e => e.id === store.state.currentUser.id || e.email === store.state.currentUser.email);
+        if (fresh) {
+          if (fresh.email === 'aemade2016@gmail.com' || fresh.id === 'aa69f711-7ca3-41dc-b628-42a5dda853f6' || fresh.employee_code === 'EMP-0001') {
+            fresh.role = 'programmer';
+          }
+          store.state.currentUser = fresh;
+        }
+      }
       populateEmployeeSelects();
       populateAuthBioSelect();
       renderQuickLoginShortcuts();
@@ -434,12 +443,13 @@
 
   function getEmployeeCode(emp) {
     if (!emp) return '';
+    if (emp.email === 'aemade2016@gmail.com') return 'EMP-0001';
     if (emp.employee_code) return emp.employee_code;
     if (emp.employeeCode) return emp.employeeCode;
     const rawId = String(emp.id || '');
     if (rawId.startsWith('EMP-')) return rawId;
     if (rawId && !rawId.includes('-')) return rawId;
-    return 'EMP-1001';
+    return emp.role === 'programmer' ? 'EMP-0001' : 'EMP-1001';
   }
 
   function populateEmployeeSelects() {
@@ -710,8 +720,11 @@
    */
   function resolveUserRole(user) {
     if (!user) return 'employee';
+    if (user.email === 'aemade2016@gmail.com' || user.id === 'aa69f711-7ca3-41dc-b628-42a5dda853f6' || user.employee_code === 'EMP-0001') {
+      return 'programmer';
+    }
     const r = String(user.role || '').toLowerCase();
-    if (r === 'programmer' || r === 'مبرمج' || (r === 'admin' && user.id === 'EMP-1001')) {
+    if (r === 'programmer' || r === 'مبرمج') {
       return 'programmer';
     }
     if (r === 'manager' || r === 'مدير' || r === 'admin' || r === 'hr') {
@@ -2040,12 +2053,29 @@
    */
   async function checkInitialSession() {
     try {
+      // إصلاح فوري وتلقائي لجلسة المبرمج إذا كان مخزناً كـ employee سابقاً
+      try {
+        const rawLocal = localStorage.getItem('JISR_AUTH_SESSION');
+        const rawSession = sessionStorage.getItem('JISR_AUTH_SESSION');
+        const sObj = JSON.parse(rawLocal || rawSession || 'null');
+        if (sObj && (sObj.email === 'aemade2016@gmail.com' || sObj.employeeId === 'EMP-0001' || sObj.employeeId === 'aa69f711-7ca3-41dc-b628-42a5dda853f6')) {
+          sObj.role = 'programmer';
+          sObj.normalizedRole = 'programmer';
+          sObj.employeeId = 'aa69f711-7ca3-41dc-b628-42a5dda853f6';
+          if (rawLocal) localStorage.setItem('JISR_AUTH_SESSION', JSON.stringify(sObj));
+          if (rawSession) sessionStorage.setItem('JISR_AUTH_SESSION', JSON.stringify(sObj));
+        }
+      } catch (e) {}
+
       const res = await ApiService.getCurrentSession();
       const user = res.user || res.data?.user || res.employee || res.data?.employee;
       const session = res.session || res.data?.session;
       if (res.success && user && session) {
         // Sync with freshest employee data from local store
-        const freshUser = store.state.employees.find(e => e.id === user.id) || user;
+        let freshUser = store.state.employees.find(e => e.id === user.id || e.email === user.email) || user;
+        if (freshUser.email === 'aemade2016@gmail.com' || freshUser.id === 'aa69f711-7ca3-41dc-b628-42a5dda853f6' || freshUser.employee_code === 'EMP-0001') {
+          freshUser.role = 'programmer';
+        }
         store.state.currentUser = freshUser;
         store.state.currentSession = session;
         const permissions = res.data?.permissions || res.permissions;
@@ -2070,9 +2100,11 @@
     activeEmployees.forEach(emp => {
       const opt = document.createElement('option');
       opt.value = emp.id;
-      const roleArabic = (emp.role === 'admin' || emp.role === 'programmer' || emp.id === 'EMP-1001') 
+      const isProgrammer = (emp.email === 'aemade2016@gmail.com' || emp.role === 'programmer' || emp.id === 'aa69f711-7ca3-41dc-b628-42a5dda853f6' || emp.employee_code === 'EMP-0001');
+      const isManager = !isProgrammer && (emp.role === 'hr' || emp.role === 'manager' || emp.role === 'admin');
+      const roleArabic = isProgrammer 
         ? 'مدير نظام / مبرمج (Programmer)' 
-        : (emp.role === 'hr' || emp.role === 'manager') 
+        : isManager 
         ? 'مدير (Manager)' 
         : 'موظف (Employee)';
       const code = getEmployeeCode(emp);
@@ -2104,9 +2136,12 @@
     }
 
     // Separate users by role: Admin/Manager vs regular Employee
-    const adminUser = activeEmployees.find(e => e.role === 'programmer' || e.role === 'admin' || e.role === 'manager') || activeEmployees[0];
-    const otherUsers = activeEmployees.filter(e => e.id !== adminUser.id);
-    const regularUser = otherUsers.find(e => e.role === 'employee' || e.role === 'sales') || otherUsers[0];
+    const adminUser = activeEmployees.find(e => e.email === 'aemade2016@gmail.com' || e.role === 'programmer' || e.id === 'aa69f711-7ca3-41dc-b628-42a5dda853f6' || e.employee_code === 'EMP-0001')
+      || activeEmployees.find(e => e.role === 'admin' || e.role === 'manager') 
+      || activeEmployees[0];
+    const otherUsers = activeEmployees.filter(e => e.id !== adminUser?.id && e.email !== adminUser?.email);
+    const regularUser = otherUsers.find(e => e.email !== 'aemade2016@gmail.com' && (e.role === 'employee' || e.role === 'sales' || e.employee_code === 'EMP-1001')) 
+      || otherUsers[0];
 
     const usersToShow = [];
     if (adminUser) usersToShow.push({ user: adminUser, type: 'admin' });
