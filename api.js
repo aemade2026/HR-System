@@ -1,6 +1,6 @@
 /**
  * ============================================================================
- * نظام جسور للموارد البشرية والرواتب | Jisr HR & Payroll Management System
+ * نظام AE (HR-SYSTEM) للموارد البشرية والرواتب | AE (HR-SYSTEM)
  * ApiService & Local Mock Database Engine (Egyptian RBAC, GPS, Audit Logs & Requests Engine)
  * Integrated with Supabase Multi-Tenant Cloud Architecture
  * ============================================================================
@@ -32,7 +32,7 @@ const BACKEND_BASE_URL = 'http://localhost:8000/api/v1';
 const INITIAL_DATABASE = {
   settings: {
     company_id: '11111111-2222-3333-4444-555555555555',
-    companyName: 'شركة النيل للتكنولوجيا',
+    companyName: 'AE (HR-SYSTEM)',
     taxNumber: '492-710-853',
     commercialRegister: '184920 - مكتب استثمار القاهرة',
     currency: 'ج.م',
@@ -59,8 +59,8 @@ const INITIAL_DATABASE = {
      -------------------------------------------------------------------------- */
   company_settings: {
     company_id: '11111111-2222-3333-4444-555555555555',
-    companyName: 'شركة النيل للتكنولوجيا',
-    companyNameEn: 'Nile Technology',
+    companyName: 'AE (HR-SYSTEM)',
+    companyNameEn: 'AE (HR-SYSTEM)',
     logo: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=180&auto=format&fit=crop&q=80',
     currency: 'ج.م',
     currencyCode: 'EGP',
@@ -71,6 +71,28 @@ const INITIAL_DATABASE = {
     commercialRegister: '184920 - مكتب استثمار القاهرة',
     laborLawReference: 'قانون العمل المصري الموحد رقم 12 لسنة 2003 وتعديلاته ولائحته التنفيذية'
   },
+
+  /* --------------------------------------------------------------------------
+     1.2 جدول الشركات والمشتركين (Companies / Tenants Table - Multi-Tenant)
+     -------------------------------------------------------------------------- */
+  companies: [
+    {
+      id: '11111111-2222-3333-4444-555555555555',
+      name: 'AE (HR-SYSTEM)',
+      company_name: 'AE (HR-SYSTEM)',
+      companyName: 'AE (HR-SYSTEM)',
+      tax_number: '492-710-853',
+      taxNumber: '492-710-853',
+      manager_name: 'م. أحمد عماد',
+      managerName: 'م. أحمد عماد',
+      phone: '01008074308',
+      email: 'aemade2016@gmail.com',
+      pin: '050298',
+      status: 'active',
+      created_at: '2022-01-01T08:00:00Z',
+      createdAt: '2022-01-01'
+    }
+  ],
 
   /* --------------------------------------------------------------------------
      1.5 جدول الأقسام الإدارية الرسمية (Departments Table)
@@ -768,6 +790,10 @@ class LocalDatabase {
             parsed.company_settings = cloneData(INITIAL_DATABASE.company_settings);
             needsSave = true;
           }
+          if (!Array.isArray(parsed.companies) || parsed.companies.length === 0) {
+            parsed.companies = cloneData(INITIAL_DATABASE.companies);
+            needsSave = true;
+          }
           if (!parsed.settings) {
             parsed.settings = cloneData(INITIAL_DATABASE.settings);
             needsSave = true;
@@ -783,6 +809,26 @@ class LocalDatabase {
           if (!parsed.role_permissions) {
             parsed.role_permissions = cloneData(INITIAL_DATABASE.role_permissions);
             needsSave = true;
+          }
+
+          // ترحيل وتحديث هوية الشركة الافتراضية إلى AE (HR-SYSTEM)
+          if (parsed.company_settings && (parsed.company_settings.companyName === 'شركة النيل للتكنولوجيا' || parsed.company_settings.companyName === 'جسور' || !parsed.company_settings.companyName)) {
+            parsed.company_settings.companyName = 'AE (HR-SYSTEM)';
+            parsed.company_settings.companyNameEn = 'AE (HR-SYSTEM)';
+            needsSave = true;
+          }
+          if (parsed.settings && (parsed.settings.companyName === 'شركة النيل للتكنولوجيا' || parsed.settings.companyName === 'جسور' || !parsed.settings.companyName)) {
+            parsed.settings.companyName = 'AE (HR-SYSTEM)';
+            needsSave = true;
+          }
+          if (Array.isArray(parsed.companies)) {
+            const defComp = parsed.companies.find(c => c.id === '11111111-2222-3333-4444-555555555555');
+            if (defComp && (defComp.name === 'شركة النيل للتكنولوجيا' || defComp.name === 'جسور')) {
+              defComp.name = 'AE (HR-SYSTEM)';
+              defComp.company_name = 'AE (HR-SYSTEM)';
+              defComp.companyName = 'AE (HR-SYSTEM)';
+              needsSave = true;
+            }
           }
 
           // استعادة وضمان حماية حساب المبرمج الأصلي (aemade2016@gmail.com) كـ Super Admin دون مساس
@@ -2227,6 +2273,349 @@ class ApiService {
       });
     } catch (err) {
       return this.#handleError(err, 'فشل في تحديث بيانات الشركة');
+    }
+  }
+
+  /* ==========================================================================
+     MULTI-TENANT SAAS MODULE (إدارة طلبات واشتراكات الشركات الجديدة)
+     ========================================================================== */
+
+  /**
+   * تسجيل شركة جديدة من صفحة الهبوط في حالة قيد الانتظار (Pending)
+   * @param {Object} tenantData { companyName, taxNumber, managerName, phone, email, pin }
+   * @param {AbortSignal} [signal]
+   */
+  static async registerNewTenant(tenantData, signal = null) {
+    try {
+      await this.simulateDelay(120, signal);
+      if (!tenantData || !tenantData.companyName || !tenantData.managerName) {
+        return this.#createEnvelope(false, null, 'يرجى استكمال كافة بيانات الشركة واسم المدير', {
+          message: 'يرجى استكمال كافة بيانات الشركة واسم المدير'
+        });
+      }
+
+      const email = String(tenantData.email || '').trim().toLowerCase();
+      const pin = String(tenantData.pin || '').trim();
+      if (!pin || pin.length < 4) {
+        return this.#createEnvelope(false, null, 'يرجى إدخال رمز PIN للمدير لا يقل عن 4 أرقام', {
+          message: 'يرجى إدخال رمز PIN للمدير لا يقل عن 4 أرقام'
+        });
+      }
+
+      const db = LocalDatabase.getDB();
+      if (!Array.isArray(db.companies)) db.companies = cloneData(INITIAL_DATABASE.companies || []);
+
+      // فحص عدم تكرار البريد الإلكتروني أو الرقم الضريبي
+      const duplicate = db.companies.find(c => 
+        (c.email && c.email.toLowerCase() === email) || 
+        (tenantData.taxNumber && c.taxNumber && c.taxNumber === tenantData.taxNumber)
+      );
+      if (duplicate) {
+        return this.#createEnvelope(false, null, 'البريد الإلكتروني أو الرقم الضريبي مسجل بالفعل لشركة أخرى بالنظام', {
+          message: 'البريد الإلكتروني أو الرقم الضريبي مسجل بالفعل لشركة أخرى بالنظام'
+        });
+      }
+
+      // توليد معرف UUID فريد للشركة
+      const companyId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : 'comp-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9);
+
+      const newTenant = {
+        id: companyId,
+        company_id: companyId,
+        name: tenantData.companyName.trim(),
+        company_name: tenantData.companyName.trim(),
+        companyName: tenantData.companyName.trim(),
+        tax_number: (tenantData.taxNumber || '').trim(),
+        taxNumber: (tenantData.taxNumber || '').trim(),
+        manager_name: tenantData.managerName.trim(),
+        managerName: tenantData.managerName.trim(),
+        phone: (tenantData.phone || '').trim(),
+        email: email,
+        pin: pin,
+        status: 'pending',
+        created_at: new Date().toISOString(),
+        createdAt: new Date().toISOString().split('T')[0]
+      };
+
+      // 1. الإدراج في جدول companies في Supabase
+      if (supabase) {
+        try {
+          const sbPayload = {
+            id: companyId,
+            name: newTenant.companyName,
+            tax_number: newTenant.taxNumber || null,
+            manager_name: newTenant.managerName,
+            phone: newTenant.phone || null,
+            email: newTenant.email || null,
+            pin: newTenant.pin,
+            status: 'pending'
+          };
+          const { error } = await supabase.from('companies').insert([sbPayload]);
+          if (error) {
+            console.warn('[Supabase registerNewTenant Warning]:', error.message || error);
+          }
+        } catch (sbErr) {
+          console.warn('[Supabase registerNewTenant Fallback]:', sbErr);
+        }
+      }
+
+      // 2. الحفظ في LocalDatabase.companies كآلية Fallback مضمونة
+      db.companies.unshift(newTenant);
+      LocalDatabase.saveDB(db);
+
+      // تسجيل الحدث في سجل الرقابة والتدقيق (Audit Log)
+      AuditMiddleware.log({
+        action: 'REGISTER_TENANT',
+        actionType: 'إضافة',
+        target: 'companies',
+        targetId: companyId,
+        details: `تسجيل شركة جديدة بقائمة الانتظار: ${newTenant.companyName} (المدير: ${newTenant.managerName} - ${newTenant.phone})`,
+        payload: newTenant
+      });
+
+      return this.#createEnvelope(true, cloneData(newTenant), null, {
+        message: 'تم استلام طلب تسجيل شركتكم بنجاح! طلبكم قيد المراجعة والاعتماد من قبل الإدارة وسيتم تفعيل حسابكم فوراً.'
+      });
+    } catch (err) {
+      return this.#handleError(err, 'فشل في تسجيل الشركة الجديدة');
+    }
+  }
+
+  /**
+   * جلب جميع الشركات المسجلة بالنظام (سواء Pending أو Active)
+   * @param {AbortSignal} [signal]
+   */
+  static async getAllTenants(signal = null) {
+    try {
+      await this.simulateDelay(60, signal);
+      let tenants = [];
+
+      // 1. جلب الشركات من Supabase أولاً
+      if (supabase) {
+        try {
+          const { data, error } = await supabase
+            .from('companies')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+          if (data && !error && data.length > 0) {
+            tenants = data.map(d => ({
+              id: d.id,
+              company_id: d.id,
+              companyName: d.name || d.company_name || d.companyName || 'شركة بدون اسم',
+              name: d.name || d.company_name || d.companyName || 'شركة بدون اسم',
+              taxNumber: d.tax_number ?? d.taxNumber ?? 'غير مسجل',
+              tax_number: d.tax_number ?? d.taxNumber ?? 'غير مسجل',
+              managerName: d.manager_name ?? d.managerName ?? 'غير مسجل',
+              manager_name: d.manager_name ?? d.managerName ?? 'غير مسجل',
+              phone: d.phone || '',
+              email: d.email || '',
+              pin: d.pin || '',
+              status: d.status || 'active',
+              createdAt: d.created_at || d.createdAt || new Date().toISOString()
+            }));
+          }
+        } catch (sbErr) {
+          console.warn('[Supabase getAllTenants Fallback]:', sbErr);
+        }
+      }
+
+      // 2. المزامنة والدمج مع LocalDatabase
+      const db = LocalDatabase.getDB();
+      if (!Array.isArray(db.companies)) {
+        db.companies = cloneData(INITIAL_DATABASE.companies || []);
+        LocalDatabase.saveDB(db);
+      }
+
+      if (tenants.length === 0) {
+        tenants = cloneData(db.companies);
+      } else {
+        // دمج الشركات المحلية غير المرفوعة بعد
+        db.companies.forEach(localC => {
+          if (!tenants.some(t => t.id === localC.id)) {
+            tenants.push(localC);
+          }
+        });
+      }
+
+      // فرز القائمة بحيث تظهر الشركات المعلقة أولاً ثم حسب التاريخ
+      tenants.sort((a, b) => {
+        if (a.status === 'pending' && b.status !== 'pending') return -1;
+        if (a.status !== 'pending' && b.status === 'pending') return 1;
+        return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+      });
+
+      return this.#createEnvelope(true, cloneData(tenants));
+    } catch (err) {
+      return this.#handleError(err, 'فشل في استرجاع قائمة الشركات');
+    }
+  }
+
+  /**
+   * اعتماد وتفعيل شركة جديدة وإنشاء حساب المدير العام لها (role = 'admin')
+   * @param {string} companyId
+   * @param {AbortSignal} [signal]
+   */
+  static async approveTenant(companyId, signal = null) {
+    try {
+      await this.simulateDelay(120, signal);
+      const db = LocalDatabase.getDB();
+      if (!Array.isArray(db.companies)) db.companies = [];
+
+      let company = db.companies.find(c => c.id === companyId);
+
+      // إذا لم تكن موجودة محلياً، نبحث عنها في Supabase
+      if (!company && supabase) {
+        try {
+          const { data } = await supabase.from('companies').select('*').eq('id', companyId).maybeSingle();
+          if (data) {
+            company = {
+              id: data.id,
+              companyName: data.name || data.company_name,
+              taxNumber: data.tax_number,
+              managerName: data.manager_name,
+              phone: data.phone,
+              email: data.email,
+              pin: data.pin,
+              status: 'pending'
+            };
+            db.companies.push(company);
+          }
+        } catch (e) {}
+      }
+
+      if (!company) {
+        return this.#createEnvelope(false, null, 'الشركة غير موجودة بالنظام', { message: 'الشركة غير موجودة بالنظام' });
+      }
+
+      // 1. تحديث حالة الشركة إلى active في Supabase
+      if (supabase) {
+        try {
+          await supabase.from('companies').update({ status: 'active' }).eq('id', companyId);
+        } catch (sbErr) {
+          console.warn('[Supabase approveTenant status error]:', sbErr);
+        }
+      }
+
+      // 2. تحديث حالة الشركة محلياً
+      company.status = 'active';
+
+      // 3. إنشاء موظف جديد ليكون مدير هذه الشركة (role = 'admin')
+      const managerName = company.managerName || company.manager_name || 'مدير الشركة';
+      const managerEmail = company.email || `admin@comp-${companyId.slice(0, 6)}.com`;
+      const managerPhone = company.phone || '';
+      const managerPin = String(company.pin || '123456').trim();
+
+      const managerId = await this.getNextEmployeeId();
+      const managerEmp = this.#normalizeEmployee({
+        id: managerId,
+        employee_code: managerId,
+        company_id: companyId,
+        fullName: managerName,
+        firstName: managerName.split(' ')[0],
+        lastName: managerName.split(' ').slice(1).join(' ') || '',
+        email: managerEmail,
+        phone: managerPhone,
+        pin: managerPin,
+        role: 'admin',
+        status: 'active',
+        department: 'الإدارة العامة',
+        jobTitle: 'مدير عام الشركة (Admin)',
+        baseSalary: 15000,
+        housingAllowance: 2000,
+        transportAllowance: 1000,
+        otherAllowances: 1000,
+        salaryStatus: 'processing',
+        leaveBalance: 21,
+        hireDate: new Date().toISOString().split('T')[0]
+      });
+
+      // 4. إدراج حساب المدير في جدول employees في Supabase
+      if (supabase) {
+        try {
+          const sbPayload = this.#toSupabaseEmployee(managerEmp, companyId);
+          sbPayload.role = 'admin';
+          sbPayload.status = 'active';
+          await supabase.from('employees').insert([sbPayload]);
+        } catch (sbErr) {
+          console.warn('[Supabase approveTenant Manager Insert Fallback]:', sbErr);
+        }
+      }
+
+      // 5. حفظ الموظف الجديد في LocalDatabase
+      if (!Array.isArray(db.employees)) db.employees = [];
+      db.employees = db.employees.filter(e => e.id !== managerId && e.email !== managerEmail);
+      db.employees.push(managerEmp);
+
+      LocalDatabase.saveDB(db);
+
+      // تسجيل الحدث في سجل التدقيق
+      AuditMiddleware.log({
+        action: 'APPROVE_TENANT',
+        actionType: 'اعتماد',
+        target: 'companies',
+        targetId: companyId,
+        details: `اعتماد وتفعيل الشركة: "${company.companyName}" وإنشاء حساب المدير العام المسؤول: ${managerName} (${managerId}) بصلاحية Admin`,
+        payload: { companyId, managerEmp }
+      });
+
+      return this.#createEnvelope(true, { company, manager: managerEmp }, null, {
+        message: `تم اعتماد وتفعيل الشركة "${company.companyName}" بنجاح! تم إنشاء حساب المدير العام (${managerName}) برتبة Admin وبكود (${managerId}).`
+      });
+    } catch (err) {
+      return this.#handleError(err, 'فشل في اعتماد وتفعيل الشركة');
+    }
+  }
+
+  /**
+   * رفض وحذف الشركة وطلب اشتراكها من النظام
+   * @param {string} companyId
+   * @param {AbortSignal} [signal]
+   */
+  static async rejectTenant(companyId, signal = null) {
+    try {
+      await this.simulateDelay(100, signal);
+      const db = LocalDatabase.getDB();
+      const comp = (db.companies || []).find(c => c.id === companyId);
+      const compName = comp?.companyName || companyId;
+
+      // 1. الحذف من Supabase
+      if (supabase) {
+        try {
+          await supabase.from('companies').delete().eq('id', companyId);
+          await supabase.from('employees').delete().eq('company_id', companyId);
+        } catch (sbErr) {
+          console.warn('[Supabase rejectTenant error]:', sbErr);
+        }
+      }
+
+      // 2. الحذف من LocalDatabase
+      if (Array.isArray(db.companies)) {
+        db.companies = db.companies.filter(c => c.id !== companyId);
+      }
+      if (Array.isArray(db.employees)) {
+        // حذف موظفي هذه الشركة فقط مع حماية حساب المبرمج Super Admin
+        db.employees = db.employees.filter(e => e.company_id !== companyId || e.role === 'programmer');
+      }
+
+      LocalDatabase.saveDB(db);
+
+      AuditMiddleware.log({
+        action: 'REJECT_TENANT',
+        actionType: 'حذف',
+        target: 'companies',
+        targetId: companyId,
+        details: `رفض وحذف الشركة: "${compName}" (${companyId}) وجميع بياناتها من النظام`,
+        payload: { companyId }
+      });
+
+      return this.#createEnvelope(true, null, null, {
+        message: `تم رفض وحذف الشركة "${compName}" بنجاح`
+      });
+    } catch (err) {
+      return this.#handleError(err, 'فشل في رفض وحذف الشركة');
     }
   }
 

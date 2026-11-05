@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4c1d95" />
+      <stop offset="50%" stop-color="#2563eb" />
+      <stop offset="100%" stop-color="#0284c7" />
+    </linearGradient>
+    <linearGradient id="glowGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#c084fc" />
+      <stop offset="100%" stop-color="#38bdf8" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000000" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <!-- Background with smooth rounded corners -->
+  <rect width="512" height="512" rx="128" fill="url(#bgGrad)" />
+
+  <!-- Inner Soft Border -->
+  <rect x="12" y="12" width="488" height="488" rx="116" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="6" />
+
+  <!-- Stylized Biometric Fingerprint & Shield Icon -->
+  <g filter="url(#shadow)" fill="none" stroke="white" stroke-width="22" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Center Core Loop -->
+    <path d="M256 340 V270 C256 242 278 220 306 220 C334 220 356 242 356 270 V330" />
+    <path d="M256 270 C256 226 220 190 176 190 C146 190 120 207 106 232" />
+    <path d="M156 360 V280 C156 260 172 244 192 244 C212 244 228 260 228 280 V370" />
+    
+    <!-- Outer Arches -->
+    <path d="M106 310 V280 C106 197 173 130 256 130 C339 130 406 197 406 280 V360" />
+    <path d="M306 380 V350 C306 322 284 300 256 300" />
+    <path d="M206 400 C206 370 230 350 256 350" />
+    <path d="M356 370 V310" />
+  </g>
+
+  <!-- Shield Badge with Live Checkmark in bottom right corner -->
+  <g transform="translate(320, 320)">
+    <circle cx="50" cy="50" r="58" fill="#10b981" stroke="#ffffff" stroke-width="10" filter="url(#shadow)" />
+    <path d="M30 52 L44 66 L72 38" fill="none" stroke="#ffffff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" />
+  </g>
+</svg>

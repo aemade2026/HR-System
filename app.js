@@ -1,6 +1,6 @@
 /**
  * ============================================================================
- * نظام جسور للموارد البشرية والرواتب | Jisr HR & Payroll Management System
+ * نظام AE (HR-SYSTEM) للموارد البشرية والرواتب | AE (HR-SYSTEM)
  * Production Application Controller (ES2024+ Clean Architecture)
  * Modern Encapsulation, Reactive State Proxy, Native Intl APIs, and a11y
  * ============================================================================
@@ -1211,6 +1211,71 @@
       updateCompanyLogoPreview(logoInput.value.trim());
     });
 
+    // 5.5 أحداث إدارة الشركات والمشتركين (Tenants Management)
+    const tenantsSearch = document.getElementById('progTenantsSearch');
+    const debouncedTenantsSearch = debounce(() => renderProgrammerTenantsTable(), 150);
+    tenantsSearch?.addEventListener('input', debouncedTenantsSearch);
+
+    document.getElementById('progTenantsStatusFilter')?.addEventListener('change', () => renderProgrammerTenantsTable());
+
+    document.getElementById('progRefreshTenantsBtn')?.addEventListener('click', async () => {
+      sound.playClick();
+      showToast('جاري تحديث قائمة الشركات...', 'info', 800);
+      await renderProgrammerTenantsTable();
+      showToast('تم تحديث قائمة الشركات بنجاح', 'success');
+    });
+
+    // تفويض نقرات جدول الشركات (Approve Tenant, Reject/Delete Tenant)
+    const tenantsTableBody = document.getElementById('progTenantsTableBody');
+    tenantsTableBody?.addEventListener('click', async (e) => {
+      const target = e.target.closest('[data-action]');
+      if (!target) return;
+
+      const action = target.dataset.action;
+      const companyId = target.dataset.id;
+      if (!companyId) return;
+
+      sound.playClick();
+
+      if (action === 'prog-approve-tenant') {
+        const confirmed = confirm('هل أنت متأكد من اعتماد وتفعيل هذه الشركة؟\nسيتم فوراً تفعيل الشركة وإنشاء حساب رسمي للمدير المسؤول بصلاحية Admin وربطه بالشركة.');
+        if (!confirmed) return;
+
+        target.disabled = true;
+        target.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري الاعتماد...';
+
+        const res = await ApiService.approveTenant(companyId);
+        if (res.success) {
+          sound.playSuccess();
+          showToast(res.message || 'تم اعتماد وتفعيل الشركة بنجاح!', 'success', 5000);
+          await loadEmployees();
+          renderProgrammerTenantsTable();
+        } else {
+          sound.playError();
+          showToast(res.message || 'فشل في اعتماد الشركة', 'error');
+          target.disabled = false;
+        }
+      } else if (action === 'prog-reject-tenant') {
+        const confirmed = confirm('تحذير: هل أنت متأكد من رفض وحذف هذه الشركة نهائياً من النظام؟\nسيتم حذف الشركة وجميع بياناتها.');
+        if (!confirmed) return;
+
+        target.disabled = true;
+        target.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري الحذف...';
+
+        const res = await ApiService.rejectTenant(companyId);
+        if (res.success) {
+          sound.playSuccess();
+          showToast(res.message || 'تم حذف الشركة بنجاح', 'success');
+          await loadEmployees();
+          renderProgrammerTenantsTable();
+        } else {
+          sound.playError();
+          showToast(res.message || 'فشل في حذف الشركة', 'error');
+          target.disabled = false;
+        }
+      }
+    });
+
     // 6. زر إعادة تهيئة وتصفير النظام في لوحة المبرمج
     const progResetBtn = document.getElementById('progResetDataBtn');
     progResetBtn?.addEventListener('click', async () => {
@@ -1287,7 +1352,7 @@
     });
 
     if (filtered.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-slate-500 font-medium">لا يوجد مستخدمون مطابقون لمعايير البحث</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" class="text-center py-8 text-slate-500 font-medium">لا يوجد مستخدمون مطابقون لمعايير البحث</td></tr>`;
       return;
     }
 
@@ -1304,70 +1369,128 @@
 
       const avatarSrc = emp.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100';
       const isCurrentUser = store.state.currentUser && store.state.currentUser.id === emp.id;
+      const empCode = getEmployeeCode(emp);
+      const childId = `prog-user-child-${emp.id}`;
 
       return `
-        <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors">
-          <td class="p-3.5">
-            <div class="flex items-center gap-3">
-              <img src="${avatarSrc}" alt="${escapeHTML(emp.fullName)}" class="w-10 h-10 rounded-full object-cover border border-slate-200 dark:border-slate-700 shadow-sm shrink-0">
+        <tr class="table-parent-row hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors cursor-pointer md:cursor-default" data-child-id="${childId}">
+          <td class="p-2.5 sm:p-3.5">
+            <div class="flex items-center gap-2.5">
+              <img src="${avatarSrc}" alt="${escapeHTML(emp.fullName)}" class="w-9 h-9 sm:w-10 sm:h-10 rounded-full object-cover border border-slate-200 dark:border-slate-700 shadow-sm shrink-0">
               <div class="min-w-0">
-                <div class="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                <div class="font-bold text-slate-900 dark:text-white flex items-center gap-1.5 flex-wrap">
                   <span class="truncate">${escapeHTML(emp.fullName)}</span>
                   ${isCurrentUser ? '<span class="px-1.5 py-0.2 rounded text-[10px] bg-purple-200 dark:bg-purple-900 text-purple-900 dark:text-purple-200 font-bold font-mono">حسابك</span>' : ''}
                 </div>
-                <div class="text-xs text-slate-500 dark:text-slate-400 font-mono font-medium">${escapeHTML(emp.id)} • ${escapeHTML(emp.email || 'بدون بريد')}</div>
+                <div class="text-xs text-slate-500 dark:text-slate-400 font-mono font-medium flex items-center gap-1 mt-0.5">
+                  <span class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold">${escapeHTML(empCode)}</span>
+                  <span class="hidden sm:inline text-slate-400">•</span>
+                  <span class="hidden sm:inline truncate max-w-[140px]" title="${escapeHTML(emp.email || '')}">${escapeHTML(emp.email || 'بدون بريد')}</span>
+                </div>
               </div>
             </div>
           </td>
 
-          <td class="p-3.5">
+          <td class="p-3.5 whitespace-nowrap hidden md:table-cell">
             <div class="font-bold text-slate-800 dark:text-slate-200">${escapeHTML(emp.jobTitle || 'موظف')}</div>
             <div class="text-xs text-slate-500 dark:text-slate-400">${escapeHTML(emp.department || 'عام')}</div>
           </td>
 
-          <td class="p-3.5">
+          <td class="p-2.5 sm:p-3.5 whitespace-nowrap">
             ${roleBadge}
           </td>
 
-          <td class="p-3.5 font-mono">
+          <td class="p-3.5 font-mono whitespace-nowrap hidden md:table-cell">
             <div class="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700">
               <span class="font-black tracking-widest text-xs">${escapeHTML(emp.pin || '1234')}</span>
               <i class="fa-solid fa-key text-[10px] text-amber-500" title="رمز الدخول"></i>
             </div>
           </td>
 
-          <td class="p-3.5">
+          <td class="p-3.5 whitespace-nowrap hidden lg:table-cell">
             <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
               <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 badge-live-pulse"></span>
               <span>نشط (Active)</span>
             </span>
           </td>
 
-          <td class="p-3.5 text-center">
-            <div class="flex items-center justify-center gap-1.5 flex-wrap">
+          <td class="p-3.5 text-center whitespace-nowrap hidden md:table-cell">
+            <div class="flex items-center justify-center gap-1.5 whitespace-nowrap">
               <!-- تغيير الرتبة -->
-              <button type="button" data-action="change-role" data-id="${emp.id}" class="p-1.5 px-2.5 rounded-lg bg-purple-50 dark:bg-purple-950/60 hover:bg-purple-100 dark:hover:bg-purple-900/80 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 text-xs font-bold flex items-center gap-1 transition-all" title="ترقية أو خفض الرتبة">
+              <button type="button" data-action="change-role" data-id="${emp.id}" class="p-1.5 px-2.5 rounded-lg bg-purple-50 dark:bg-purple-950/60 hover:bg-purple-100 dark:hover:bg-purple-900/80 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 text-xs font-bold flex items-center gap-1 transition-all shrink-0" title="ترقية أو خفض الرتبة">
                 <i class="fa-solid fa-user-shield text-[11px]"></i>
                 <span>الرتبة</span>
               </button>
 
               <!-- إعادة تعيين PIN -->
-              <button type="button" data-action="reset-pin" data-id="${emp.id}" class="p-1.5 px-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/80 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-800 text-xs font-bold flex items-center gap-1 transition-all" title="إعادة تعيين رمز PIN">
+              <button type="button" data-action="reset-pin" data-id="${emp.id}" class="p-1.5 px-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/80 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-800 text-xs font-bold flex items-center gap-1 transition-all shrink-0" title="إعادة تعيين رمز PIN">
                 <i class="fa-solid fa-key text-[11px]"></i>
                 <span>PIN</span>
               </button>
 
               <!-- تعديل البيانات -->
-              <button type="button" data-action="edit-user" data-id="${emp.id}" class="p-1.5 px-2.5 rounded-lg bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/80 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-xs font-bold flex items-center gap-1 transition-all" title="تعديل بيانات المستخدم">
+              <button type="button" data-action="edit-user" data-id="${emp.id}" class="p-1.5 px-2.5 rounded-lg bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/80 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-xs font-bold flex items-center gap-1 transition-all shrink-0" title="تعديل بيانات المستخدم">
                 <i class="fa-solid fa-pen-to-square text-[11px]"></i>
                 <span>تعديل</span>
               </button>
 
               <!-- حذف المستخدم -->
-              <button type="button" data-action="delete-user" data-id="${emp.id}" ${isCurrentUser ? 'disabled' : ''} class="p-1.5 px-2.5 rounded-lg ${isCurrentUser ? 'opacity-40 cursor-not-allowed bg-slate-100 dark:bg-slate-800 text-slate-400' : 'bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 dark:hover:bg-rose-900/80 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800'} text-xs font-bold flex items-center gap-1 transition-all" title="${isCurrentUser ? 'لا يمكن حذف الحساب المسجل به حالياً' : 'حذف المستخدم'}">
+              <button type="button" data-action="delete-user" data-id="${emp.id}" ${isCurrentUser ? 'disabled' : ''} class="p-1.5 px-2.5 rounded-lg ${isCurrentUser ? 'opacity-40 cursor-not-allowed bg-slate-100 dark:bg-slate-800 text-slate-400' : 'bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 dark:hover:bg-rose-900/80 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800'} text-xs font-bold flex items-center gap-1 transition-all shrink-0" title="${isCurrentUser ? 'لا يمكن حذف الحساب المسجل به حالياً' : 'حذف المستخدم'}">
                 <i class="fa-solid fa-trash-can text-[11px]"></i>
                 <span>حذف</span>
               </button>
+            </div>
+          </td>
+
+          <td class="p-2 sm:p-2.5 text-center md:hidden">
+            <button class="row-expand-btn" data-action="toggle-child-row" data-target="${childId}" title="عرض باقي التفاصيل والإجراءات" aria-label="عرض باقي التفاصيل والإجراءات">
+              <i class="fa-solid fa-chevron-down text-xs"></i>
+            </button>
+          </td>
+        </tr>
+
+        <tr id="${childId}" class="responsive-child-row hidden bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700">
+          <td colspan="7" class="p-2.5 sm:p-3">
+            <div class="responsive-child-card p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-sm space-y-2.5 text-xs">
+              <div class="grid grid-cols-2 gap-2 text-xs border-b border-slate-100 dark:border-slate-800 pb-2">
+                <div>
+                  <span class="text-slate-500 font-medium block text-[11px]">المسمى والقسم:</span>
+                  <span class="font-bold text-slate-800 dark:text-slate-200">${escapeHTML(emp.jobTitle || 'موظف')} • ${escapeHTML(emp.department || 'عام')}</span>
+                </div>
+                <div>
+                  <span class="text-slate-500 font-medium block text-[11px]">رمز الـ PIN:</span>
+                  <span class="font-mono font-black text-amber-600 dark:text-amber-400">${escapeHTML(emp.pin || '1234')}</span>
+                </div>
+                <div class="col-span-2 sm:col-span-1">
+                  <span class="text-slate-500 font-medium block text-[11px]">البريد الإلكتروني:</span>
+                  <span class="font-mono text-slate-700 dark:text-slate-300 break-all">${escapeHTML(emp.email || 'بدون بريد')}</span>
+                </div>
+                <div>
+                  <span class="text-slate-500 font-medium block text-[11px]">حالة الحساب:</span>
+                  <span class="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-bold"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>نشط (Active)</span>
+                </div>
+              </div>
+              <div>
+                <span class="text-slate-500 font-medium block mb-1.5 text-[11px]">الإجراءات والتحكم الجذري:</span>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                  <button type="button" data-action="change-role" data-id="${emp.id}" class="p-2 rounded-lg bg-purple-50 dark:bg-purple-950/60 hover:bg-purple-100 dark:hover:bg-purple-900/80 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 text-xs font-bold flex items-center justify-center gap-1.5">
+                    <i class="fa-solid fa-user-shield text-xs"></i>
+                    <span>الرتبة</span>
+                  </button>
+                  <button type="button" data-action="reset-pin" data-id="${emp.id}" class="p-2 rounded-lg bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/80 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-800 text-xs font-bold flex items-center justify-center gap-1.5">
+                    <i class="fa-solid fa-key text-xs"></i>
+                    <span>PIN</span>
+                  </button>
+                  <button type="button" data-action="edit-user" data-id="${emp.id}" class="p-2 rounded-lg bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/80 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-xs font-bold flex items-center justify-center gap-1.5">
+                    <i class="fa-solid fa-pen-to-square text-xs"></i>
+                    <span>تعديل</span>
+                  </button>
+                  <button type="button" data-action="delete-user" data-id="${emp.id}" ${isCurrentUser ? 'disabled' : ''} class="p-2 rounded-lg ${isCurrentUser ? 'opacity-40 cursor-not-allowed bg-slate-100 text-slate-400' : 'bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800'} text-xs font-bold flex items-center justify-center gap-1.5">
+                    <i class="fa-solid fa-trash-can text-xs"></i>
+                    <span>حذف</span>
+                  </button>
+                </div>
+              </div>
             </div>
           </td>
         </tr>
@@ -1787,11 +1910,11 @@
     }
 
     if (filtered.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="5" class="text-center py-8 text-slate-500 font-medium">لا توجد سجلات تدقيق مطابقة لمعايير البحث</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-slate-500 font-medium">لا توجد سجلات تدقيق مطابقة لمعايير البحث</td></tr>`;
       return;
     }
 
-    tbody.innerHTML = filtered.slice(0, 150).map(log => {
+    tbody.innerHTML = filtered.slice(0, 150).map((log, idx) => {
       let actionBadge = '';
       const type = log.actionType || 'تعديل';
       if (type === 'إضافة') actionBadge = '<span class="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">إضافة (Create)</span>';
@@ -1804,19 +1927,46 @@
       const actorName = log.performedBy?.name || 'النظام الآلي';
       const actorRole = log.performedBy?.roleArabic || log.performedBy?.role || 'System';
       const actorId = log.performedBy?.id ? `(${log.performedBy.id})` : '';
+      const childId = `audit-child-${idx}-${log.id || Date.now()}`;
 
       return `
-        <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors">
-          <td class="p-3.5 font-mono text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+        <tr class="table-parent-row hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors cursor-pointer md:cursor-default" data-child-id="${childId}">
+          <td class="p-2.5 sm:p-3.5 font-mono text-xs text-slate-500 dark:text-slate-400">
             ${escapeHTML(log.dateFormatted || log.timestamp)}
           </td>
-          <td class="p-3.5">
-            <div class="font-bold text-slate-900 dark:text-white text-xs sm:text-sm">${escapeHTML(actorName)} <span class="font-mono text-xs text-slate-400">${escapeHTML(actorId)}</span></div>
-            <div class="text-[11px] text-purple-600 dark:text-purple-400 font-semibold">${escapeHTML(actorRole)}</div>
+          <td class="p-2.5 sm:p-3.5">
+            <div class="font-bold text-slate-900 dark:text-white text-xs sm:text-sm flex items-center gap-1.5 flex-wrap">
+              <span>${escapeHTML(actorName)}</span>
+              <span class="text-[10px] px-1.5 py-0.2 rounded bg-purple-100 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 font-bold">${escapeHTML(actorRole)}</span>
+            </div>
+            ${actorId ? `<div class="font-mono text-[11px] text-slate-400 hidden sm:block">${escapeHTML(actorId)}</div>` : ''}
           </td>
-          <td class="p-3.5 whitespace-nowrap">${actionBadge}</td>
-          <td class="p-3.5 font-mono font-bold text-xs text-slate-700 dark:text-slate-300">${escapeHTML(log.target || 'system')}</td>
-          <td class="p-3.5 text-xs text-slate-700 dark:text-slate-300 max-w-lg break-words leading-relaxed">${escapeHTML(log.details)}</td>
+          <td class="p-3.5 whitespace-nowrap hidden md:table-cell">${actionBadge}</td>
+          <td class="p-3.5 font-mono font-bold text-xs text-slate-700 dark:text-slate-300 hidden lg:table-cell">${escapeHTML(log.target || 'system')}</td>
+          <td class="p-3.5 text-xs text-slate-700 dark:text-slate-300 max-w-lg break-words leading-relaxed hidden md:table-cell">${escapeHTML(log.details)}</td>
+          <td class="p-2 sm:p-2.5 text-center md:hidden">
+            <button class="row-expand-btn" data-action="toggle-child-row" data-target="${childId}" title="عرض باقي التفاصيل" aria-label="عرض باقي التفاصيل">
+              <i class="fa-solid fa-chevron-down text-xs"></i>
+            </button>
+          </td>
+        </tr>
+        <tr id="${childId}" class="responsive-child-row hidden bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700">
+          <td colspan="6" class="p-2.5 sm:p-3">
+            <div class="responsive-child-card p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-sm space-y-2 text-xs">
+              <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-1.5">
+                <span class="text-slate-500 font-medium">نوع الإجراء:</span>
+                <div>${actionBadge}</div>
+              </div>
+              <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-1.5">
+                <span class="text-slate-500 font-medium">الكيان المستهدف:</span>
+                <span class="font-mono font-bold text-slate-800 dark:text-slate-200">${escapeHTML(log.target || 'system')}</span>
+              </div>
+              <div>
+                <span class="text-slate-500 font-medium block mb-1">تفاصيل وبيانات الحركة:</span>
+                <p class="text-slate-800 dark:text-slate-200 font-medium leading-relaxed bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700">${escapeHTML(log.details)}</p>
+              </div>
+            </div>
+          </td>
         </tr>
       `;
     }).join('');
@@ -1853,6 +2003,181 @@
   }
 
   /* --------------------------------------------------------------------------
+     3.5 إدارة الشركات والمشتركين (Multi-Tenant SaaS Management)
+     -------------------------------------------------------------------------- */
+  let cachedTenantsList = [];
+
+  /**
+   * جلب وعرض جدول إدارة الشركات والمشتركين في لوحة المبرمج
+   */
+  async function renderProgrammerTenantsTable() {
+    const tbody = document.getElementById('progTenantsTableBody');
+    if (!tbody) return;
+
+    try {
+      const res = await ApiService.getAllTenants();
+      const tenants = (res && res.success) ? (res.data || []) : [];
+      cachedTenantsList = tenants;
+
+      // تحديث عدادات KPI
+      const totalCount = tenants.length;
+      const activeCount = tenants.filter(t => t.status === 'active').length;
+      const pendingCount = tenants.filter(t => t.status === 'pending').length;
+
+      const totalEl = document.getElementById('progTenantsTotalCount');
+      const activeEl = document.getElementById('progTenantsActiveCount');
+      const pendingEl = document.getElementById('progTenantsPendingCount');
+      const badgeEl = document.getElementById('progTenantsPendingBadge');
+
+      if (totalEl) totalEl.textContent = String(totalCount);
+      if (activeEl) activeEl.textContent = String(activeCount);
+      if (pendingEl) pendingEl.textContent = String(pendingCount);
+
+      if (badgeEl) {
+        if (pendingCount > 0) {
+          badgeEl.textContent = String(pendingCount);
+          badgeEl.classList.remove('hidden');
+        } else {
+          badgeEl.classList.add('hidden');
+        }
+      }
+
+      // تطبيق الفلاتر
+      const searchVal = String(document.getElementById('progTenantsSearch')?.value || '').toLowerCase().trim();
+      const statusVal = document.getElementById('progTenantsStatusFilter')?.value || 'all';
+
+      let filtered = [...tenants];
+      if (statusVal !== 'all') {
+        filtered = filtered.filter(t => t.status === statusVal);
+      }
+
+      if (searchVal) {
+        filtered = filtered.filter(t =>
+          (t.companyName || t.name || '').toLowerCase().includes(searchVal) ||
+          (t.managerName || t.manager_name || '').toLowerCase().includes(searchVal) ||
+          (t.email || '').toLowerCase().includes(searchVal) ||
+          (t.phone || '').includes(searchVal) ||
+          (t.taxNumber || t.tax_number || '').includes(searchVal)
+        );
+      }
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="7" class="text-center py-10 text-xs text-slate-500 font-medium">
+              <i class="fa-solid fa-buildings text-3xl text-slate-300 dark:text-slate-700 mb-2 block"></i>
+              لا توجد شركات أو طلبات اشتراك مطابقة لمعايير البحث الحالية
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = filtered.map((t, idx) => {
+        const isPending = t.status === 'pending';
+        const childId = `tenant-child-${idx}-${t.id || Date.now()}`;
+        const companyName = t.companyName || t.name || 'شركة غير معرّفة';
+        const managerName = t.managerName || t.manager_name || 'غير محدد';
+        const taxNum = t.taxNumber || t.tax_number || 'غير مسجل';
+        const pinCode = t.pin ? String(t.pin).trim() : '----';
+        const regDate = t.createdAt ? String(t.createdAt).split('T')[0] : '--';
+
+        const statusBadge = isPending
+          ? `<span class="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800 inline-flex items-center gap-1.5 shadow-sm">
+               <span class="w-1.5 h-1.5 rounded-full bg-amber-500 badge-live-pulse"></span>
+               معلق (بانتظار الاعتماد)
+             </span>`
+          : `<span class="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 inline-flex items-center gap-1">
+               <i class="fa-solid fa-circle-check text-[10px]"></i>
+               نشط ومفعل
+             </span>`;
+
+        const actionsHtml = isPending ? `
+          <div class="flex items-center justify-center gap-1.5 flex-wrap">
+            <button type="button" data-action="prog-approve-tenant" data-id="${escapeHTML(t.id)}" class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all active:scale-95" title="اعتماد وتفعيل الشركة وإنشاء حساب المدير">
+              <i class="fa-solid fa-check"></i>
+              <span>اعتماد وتفعيل</span>
+            </button>
+            <button type="button" data-action="prog-reject-tenant" data-id="${escapeHTML(t.id)}" class="px-2.5 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 hover:bg-rose-100 border border-rose-300 dark:border-rose-900 font-bold text-xs flex items-center gap-1 transition-all" title="رفض وحذف طلب الشركة">
+              <i class="fa-solid fa-ban"></i>
+              <span>رفض وحذف</span>
+            </button>
+          </div>
+        ` : `
+          <div class="flex items-center justify-center gap-1.5">
+            <button type="button" data-action="prog-reject-tenant" data-id="${escapeHTML(t.id)}" class="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-slate-200 dark:border-slate-700 text-xs font-bold transition-all" title="إيقاف وحذف الشركة من النظام">
+              <i class="fa-solid fa-trash-can ml-1"></i>
+              <span>إيقاف / حذف</span>
+            </button>
+          </div>
+        `;
+
+        return `
+          <tr class="table-parent-row hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors cursor-pointer md:cursor-default" data-child-id="${childId}">
+            <td class="p-2.5 sm:p-3.5">
+              <div class="font-bold text-slate-900 dark:text-white text-xs sm:text-sm flex items-center gap-2">
+                <i class="fa-solid fa-building text-purple-600 dark:text-purple-400 text-sm"></i>
+                <span>${escapeHTML(companyName)}</span>
+              </div>
+              <div class="text-[11px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">
+                الرقم الضريبي: <span class="font-bold">${escapeHTML(taxNum)}</span>
+              </div>
+            </td>
+            <td class="p-2.5 sm:p-3.5">
+              <div class="font-bold text-slate-800 dark:text-slate-200 text-xs sm:text-sm flex items-center gap-1">
+                <i class="fa-solid fa-user-tie text-blue-600 dark:text-blue-400 text-xs"></i>
+                <span>${escapeHTML(managerName)}</span>
+              </div>
+              <div class="text-[11px] text-slate-500 font-mono mt-0.5">
+                رمز PIN: <span class="font-bold text-blue-600 dark:text-blue-400">${escapeHTML(pinCode)}</span>
+              </div>
+            </td>
+            <td class="p-3.5 hidden md:table-cell">
+              <div class="text-xs text-slate-800 dark:text-slate-200 font-mono">${escapeHTML(t.email || '--')}</div>
+              <div class="text-[11px] text-slate-500 font-mono mt-0.5">${escapeHTML(t.phone || '--')}</div>
+            </td>
+            <td class="p-3.5 font-mono text-xs text-slate-600 dark:text-slate-400 hidden lg:table-cell">${escapeHTML(regDate)}</td>
+            <td class="p-2.5 sm:p-3.5 text-center whitespace-nowrap">${statusBadge}</td>
+            <td class="p-3.5 text-center hidden md:table-cell">${actionsHtml}</td>
+            <td class="p-2 sm:p-2.5 text-center md:hidden">
+              <button class="row-expand-btn" data-action="toggle-child-row" data-target="${childId}" title="عرض تفاصيل الشركة والإجراءات" aria-label="عرض تفاصيل الشركة">
+                <i class="fa-solid fa-chevron-down text-xs"></i>
+              </button>
+            </td>
+          </tr>
+          <tr id="${childId}" class="responsive-child-row hidden bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700">
+            <td colspan="7" class="p-2.5 sm:p-3">
+              <div class="responsive-child-card p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-sm space-y-2.5 text-xs">
+                <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-1.5">
+                  <span class="text-slate-500 font-medium">البريد الإلكتروني:</span>
+                  <span class="font-mono font-bold text-slate-800 dark:text-slate-200">${escapeHTML(t.email || '--')}</span>
+                </div>
+                <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-1.5">
+                  <span class="text-slate-500 font-medium">رقم الهاتف:</span>
+                  <span class="font-mono font-bold text-slate-800 dark:text-slate-200">${escapeHTML(t.phone || '--')}</span>
+                </div>
+                <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-1.5">
+                  <span class="text-slate-500 font-medium">تاريخ التسجيل:</span>
+                  <span class="font-mono text-slate-700 dark:text-slate-300">${escapeHTML(regDate)}</span>
+                </div>
+                <div class="pt-1 flex flex-col gap-2">
+                  <span class="text-slate-500 font-medium">الإجراءات والتحكم:</span>
+                  <div>${actionsHtml}</div>
+                </div>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    } catch (err) {
+      console.error('Error in renderProgrammerTenantsTable:', err);
+      if (tbody) {
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center py-6 text-xs text-rose-500">حدث خطأ أثناء تحميل بيانات الشركات: ${escapeHTML(err.message || err)}</td></tr>`;
+      }
+    }
+  }
+
+  /* --------------------------------------------------------------------------
      4. الشاشة الرابعة: إعدادات وهوية الشركة الرسمية
      -------------------------------------------------------------------------- */
 
@@ -1872,8 +2197,8 @@
       const emailEl = document.getElementById('progCompEmail');
       const logoEl = document.getElementById('progCompLogo');
 
-      if (nameEl) nameEl.value = comp.companyName || 'شركة النيل للحلول الرقمية والتكنولوجيا (ش.م.م - مصر)';
-      if (nameEnEl) nameEnEl.value = comp.companyNameEn || 'Nile Digital Solutions & Technology S.A.E';
+      if (nameEl) nameEl.value = comp.companyName || 'AE (HR-SYSTEM)';
+      if (nameEnEl) nameEnEl.value = comp.companyNameEn || 'AE (HR-SYSTEM)';
       if (currEl) currEl.value = comp.currency || 'ج.م';
       if (currCodeEl) currCodeEl.value = comp.currencyCode || 'EGP';
       if (taxEl) taxEl.value = comp.taxNumber || '492-710-853';
@@ -1979,7 +2304,10 @@
     if (targetPaneId === 'progTabPaneUsers') renderProgrammerUsersTable();
     else if (targetPaneId === 'progTabPanePerms') renderProgrammerPermissionsMatrix();
     else if (targetPaneId === 'progTabPaneAudit') loadAndRenderAuditLogs();
-    else if (targetPaneId === 'progTabPaneCompany') loadCompanySettingsForm();
+    else if (targetPaneId === 'progTabPaneCompany') {
+      renderProgrammerTenantsTable();
+      loadCompanySettingsForm();
+    }
   }
 
   /**
@@ -2266,7 +2594,7 @@
       resetAuthPin();
     });
 
-    // Biometric Login Simulation / WebAuthn
+    // Biometric Login via WebAuthn API (Local Device Biometrics) with Graceful PIN Fallback
     const executeBioLogin = async () => {
       const sel = document.getElementById('authBioEmpSelect');
       const empId = sel?.value;
@@ -2274,16 +2602,55 @@
         showToast('يرجى اختيار موظف للتحقق من البصمة', 'warning');
         return;
       }
-      const rememberMe = authRememberMeCheck ? authRememberMeCheck.checked : true;
 
+      // 1. التحقق أولاً مما إذا كان الجهاز يدعم البصمة الحيوية
+      let isBioSupported = false;
+      if (window.PublicKeyCredential && typeof window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable === 'function') {
+        try {
+          isBioSupported = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+        } catch (e) {
+          isBioSupported = false;
+        }
+      }
+
+      // 2. إذا كان الجهاز لا يدعم البصمة -> تطبيق الـ Fallback
+      if (!isBioSupported || !navigator.credentials || !navigator.credentials.get) {
+        authScannerWidget?.classList.remove('scanning');
+        sound.playAlert();
+        authTabPinBtn?.click();
+        showToast('تعذر التحقق من البصمة، يرجى إدخال رمز الـ PIN', 'warning', 4000);
+        return;
+      }
+
+      // 3. استدعاء واجهة البصمة الأصلية للجهاز باستخدام WebAuthn
       authScannerWidget?.classList.add('scanning');
       sound.playClick();
 
-      setTimeout(async () => {
+      try {
+        const challenge = new Uint8Array(32);
+        if (window.crypto && window.crypto.getRandomValues) {
+          window.crypto.getRandomValues(challenge);
+        }
+
+        const requestOptions = {
+          publicKey: {
+            challenge: challenge,
+            timeout: 60000,
+            userVerification: 'required'
+          }
+        };
+
+        if (window.location && window.location.hostname && window.location.hostname !== '') {
+          requestOptions.publicKey.rpId = window.location.hostname;
+        }
+
+        const credential = await navigator.credentials.get(requestOptions);
         authScannerWidget?.classList.remove('scanning');
+
+        // في حال نجاح البصمة (Success):
+        const rememberMe = authRememberMeCheck ? authRememberMeCheck.checked : true;
         const res = await ApiService.loginWithFingerprint(empId, rememberMe);
         const user = res.user || res.data?.user || res.employee || res.data?.employee;
-        const session = res.session || res.data?.session;
         if (res.success && user) {
           sound.playSuccess();
           const permissions = res.data?.permissions || res.permissions;
@@ -2293,7 +2660,14 @@
           sound.playError();
           showToast(res.message || res.error || 'فشل التحقق من البصمة الحيوية', 'error', 3500);
         }
-      }, 600);
+      } catch (bioErr) {
+        // في حال الفشل أو تراجع المستخدم (Fallback):
+        console.warn('[WebAuthn Biometrics Fallback]:', bioErr);
+        authScannerWidget?.classList.remove('scanning');
+        sound.playAlert();
+        authTabPinBtn?.click();
+        showToast('تعذر التحقق من البصمة، يرجى إدخال رمز الـ PIN', 'warning', 4000);
+      }
     };
 
     authScannerWidget?.addEventListener('click', executeBioLogin);
@@ -4069,7 +4443,7 @@
     if (filtered.length === 0) {
       tbody.innerHTML = `
         <tr>
-          <td colspan="7" class="text-center py-10 text-xs text-slate-500 font-medium">
+          <td colspan="8" class="text-center py-10 text-xs text-slate-500 font-medium">
             <i class="fa-solid fa-folder-open text-2xl text-slate-300 dark:text-slate-700 mb-2 block"></i>
             لا توجد طلبات إدارية مطابقة لخيارات التصفية والبحث الحالية
           </td>
@@ -4078,7 +4452,7 @@
       return;
     }
 
-    tbody.innerHTML = filtered.map(req => {
+    tbody.innerHTML = filtered.map((req, idx) => {
       const emp = req.employee || store.state.employees.find(e => e.id === req.employeeId) || req.details?.rawEmployee || { fullName: req.employeeId, department: 'عام' };
       const typeInfo = getRequestTypeDisplayInfo(req.type);
 
@@ -4086,6 +4460,7 @@
       if (req.type === 'onboarding') {
         const candidate = emp;
         const isPending = req.status === 'pending';
+        const childId = `admin-req-child-${req.id || ('onboard-' + idx)}`;
 
         let statusBadgeOnboard = '';
         if (isPending) {
@@ -4116,8 +4491,8 @@
         `;
 
         return `
-          <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors bg-purple-50/20 dark:bg-purple-950/15 border-r-4 border-r-purple-500">
-            <td class="p-3.5">
+          <tr class="table-parent-row hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors bg-purple-50/20 dark:bg-purple-950/15 border-r-4 border-r-purple-500 cursor-pointer md:cursor-default" data-child-id="${childId}">
+            <td class="p-2.5 sm:p-3.5">
               <div class="font-bold text-slate-900 dark:text-white text-xs sm:text-sm flex items-center gap-1.5">
                 <i class="fa-solid fa-user-clock text-purple-600 dark:text-purple-400 text-sm"></i>
                 <span>${escapeHTML(candidate.fullName)}</span>
@@ -4125,9 +4500,13 @@
               <div class="text-[11px] text-blue-600 dark:text-blue-400 font-mono mt-0.5">
                 ${escapeHTML(getEmployeeCode(candidate))} • ${escapeHTML(candidate.phone || candidate.email || 'غير مسجل')}
               </div>
+              <div class="md:hidden mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300">
+                <i class="fa-solid fa-user-plus text-[9px]"></i>
+                <span>طلب انضمام موظف جديد</span>
+              </div>
             </td>
-            <td class="p-3.5 text-xs font-bold text-slate-700 dark:text-slate-300">${escapeHTML(candidate.department || 'عام')}</td>
-            <td class="p-3.5">
+            <td class="p-3.5 text-xs font-bold text-slate-700 dark:text-slate-300 hidden md:table-cell">${escapeHTML(candidate.department || 'عام')}</td>
+            <td class="p-3.5 hidden md:table-cell">
               <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-bold bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border-purple-300 dark:border-purple-800">
                 <i class="fa-solid fa-user-plus"></i>
                 <span>طلب انضمام موظف جديد (Onboarding)</span>
@@ -4136,13 +4515,40 @@
                 تاريخ التسجيل: <span class="font-mono text-slate-700 dark:text-slate-300">${escapeHTML(req.createdAt || req.submittedAt || '--')}</span>
               </div>
             </td>
-            <td class="p-3.5 font-mono text-xs text-slate-600 dark:text-slate-400">${escapeHTML(req.createdAt || req.submittedAt || '--')}</td>
-            <td class="p-3.5 max-w-xs">
+            <td class="p-3.5 font-mono text-xs text-slate-600 dark:text-slate-400 hidden lg:table-cell">${escapeHTML(req.createdAt || req.submittedAt || '--')}</td>
+            <td class="p-3.5 max-w-xs hidden lg:table-cell">
               <div class="text-xs text-slate-800 dark:text-slate-200 font-medium">طلب تسجيل وانضمام لفريق العمل بقسم <strong class="text-purple-600 dark:text-purple-400">${escapeHTML(candidate.department || 'عام')}</strong></div>
               <div class="text-[11px] text-amber-600 dark:text-amber-400 font-bold mt-0.5"><i class="fa-solid fa-hourglass-half ml-1"></i>بانتظار مراجعة الإدارة وتحديد الراتب والصلاحيات</div>
             </td>
-            <td class="p-3.5 text-center">${statusBadgeOnboard}</td>
-            <td class="p-3.5 text-center">${actionButtonsOnboard}</td>
+            <td class="p-2.5 sm:p-3.5 text-center whitespace-nowrap">${statusBadgeOnboard}</td>
+            <td class="p-3.5 text-center hidden md:table-cell">${actionButtonsOnboard}</td>
+            <td class="p-2 sm:p-2.5 text-center md:hidden">
+              <button class="row-expand-btn" data-action="toggle-child-row" data-target="${childId}" title="عرض تفاصيل الطلب والإجراءات" aria-label="عرض تفاصيل الطلب">
+                <i class="fa-solid fa-chevron-down text-xs"></i>
+              </button>
+            </td>
+          </tr>
+          <tr id="${childId}" class="responsive-child-row hidden bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700">
+            <td colspan="8" class="p-2.5 sm:p-3">
+              <div class="responsive-child-card p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-sm space-y-2.5 text-xs">
+                <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-1.5">
+                  <span class="text-slate-500 font-medium">القسم المطلوب:</span>
+                  <span class="font-bold text-slate-800 dark:text-slate-200">${escapeHTML(candidate.department || 'عام')}</span>
+                </div>
+                <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-1.5">
+                  <span class="text-slate-500 font-medium">تاريخ التسجيل:</span>
+                  <span class="font-mono text-slate-700 dark:text-slate-300">${escapeHTML(req.createdAt || req.submittedAt || '--')}</span>
+                </div>
+                <div class="border-b border-slate-100 dark:border-slate-800 pb-2">
+                  <span class="text-slate-500 font-medium block mb-1">بيانات وملاحظات الطلب:</span>
+                  <p class="text-slate-800 dark:text-slate-200 bg-purple-50/50 dark:bg-purple-950/30 p-2 rounded-lg border border-purple-200 dark:border-purple-900/50">طلب انضمام موظف جديد - بانتظار الاعتماد وتحديد الراتب والصلاحيات</p>
+                </div>
+                <div class="pt-1 flex flex-col gap-2">
+                  <span class="text-slate-500 font-medium">إجراءات الإدارة:</span>
+                  <div>${actionButtonsOnboard}</div>
+                </div>
+              </div>
+            </td>
           </tr>
         `;
       }
@@ -4173,14 +4579,15 @@
       }
 
       const isPending = req.status === 'pending';
+      const childId = `admin-req-child-${req.id || ('req-' + idx)}`;
 
       const actionButtons = isPending ? `
-        <div class="flex items-center justify-center gap-1.5">
-          <button type="button" data-action="manager-approve-req" data-id="${escapeHTML(req.id)}" class="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1 shadow-sm transition-all active:scale-95" title="الموافقة على الطلب">
+        <div class="flex items-center justify-center gap-1.5 flex-wrap">
+          <button type="button" data-action="manager-approve-req" data-id="${escapeHTML(req.id)}" class="px-2.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1 shadow-sm transition-all active:scale-95" title="الموافقة على الطلب">
             <i class="fa-solid fa-check"></i>
             <span>موافقة</span>
           </button>
-          <button type="button" data-action="manager-reject-req" data-id="${escapeHTML(req.id)}" class="px-2.5 py-1 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 hover:bg-rose-100 border border-rose-300 dark:border-rose-900 font-bold text-xs flex items-center gap-1 transition-all" title="رفض الطلب">
+          <button type="button" data-action="manager-reject-req" data-id="${escapeHTML(req.id)}" class="px-2.5 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 hover:bg-rose-100 border border-rose-300 dark:border-rose-900 font-bold text-xs flex items-center gap-1 transition-all" title="رفض الطلب">
             <i class="fa-solid fa-ban"></i>
             <span>رفض</span>
           </button>
@@ -4194,26 +4601,68 @@
       `;
 
       return `
-        <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors">
-          <td class="p-3.5">
+        <tr class="table-parent-row hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors cursor-pointer md:cursor-default" data-child-id="${childId}">
+          <td class="p-2.5 sm:p-3.5">
             <div class="font-bold text-slate-900 dark:text-white text-xs sm:text-sm">${escapeHTML(emp.fullName)}</div>
             <div class="text-[11px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">${escapeHTML(getEmployeeCode(emp))}</div>
+            <div class="md:hidden mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold ${typeInfo.bgClass}">
+              <i class="fa-solid ${typeInfo.icon} text-[9px]"></i>
+              <span>${escapeHTML(typeInfo.title)}</span>
+            </div>
           </td>
-          <td class="p-3.5 text-xs font-bold text-slate-700 dark:text-slate-300">${escapeHTML(emp.department || 'عام')}</td>
-          <td class="p-3.5">
+          <td class="p-3.5 text-xs font-bold text-slate-700 dark:text-slate-300 hidden md:table-cell">${escapeHTML(emp.department || 'عام')}</td>
+          <td class="p-3.5 hidden md:table-cell">
             <div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg border text-xs font-bold ${typeInfo.bgClass}">
               <i class="fa-solid ${typeInfo.icon}"></i>
               <span>${escapeHTML(typeInfo.title)}</span>
             </div>
             <div class="text-xs text-slate-600 dark:text-slate-400 mt-1">${timingText}</div>
           </td>
-          <td class="p-3.5 font-mono text-xs text-slate-600 dark:text-slate-400">${escapeHTML(req.createdAt || '--')}</td>
-          <td class="p-3.5 max-w-xs">
+          <td class="p-3.5 font-mono text-xs text-slate-600 dark:text-slate-400 hidden lg:table-cell">${escapeHTML(req.createdAt || '--')}</td>
+          <td class="p-3.5 max-w-xs hidden lg:table-cell">
             <div class="text-xs text-slate-800 dark:text-slate-200 line-clamp-2" title="${escapeHTML(req.reason || '')}">${escapeHTML(req.reason || 'لا توجد ملاحظات')}</div>
             ${managerReplySnippet}
           </td>
-          <td class="p-3.5 text-center">${statusBadge}</td>
-          <td class="p-3.5 text-center">${actionButtons}</td>
+          <td class="p-2.5 sm:p-3.5 text-center whitespace-nowrap">${statusBadge}</td>
+          <td class="p-3.5 text-center hidden md:table-cell">${actionButtons}</td>
+          <td class="p-2 sm:p-2.5 text-center md:hidden">
+            <button class="row-expand-btn" data-action="toggle-child-row" data-target="${childId}" title="عرض تفاصيل الطلب والإجراءات" aria-label="عرض تفاصيل الطلب">
+              <i class="fa-solid fa-chevron-down text-xs"></i>
+            </button>
+          </td>
+        </tr>
+        <tr id="${childId}" class="responsive-child-row hidden bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700">
+          <td colspan="8" class="p-2.5 sm:p-3">
+            <div class="responsive-child-card p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-sm space-y-2.5 text-xs">
+              <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-1.5">
+                <span class="text-slate-500 font-medium">نوع الطلب والتفاصيل:</span>
+                <div class="text-right">
+                  <div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg border text-[11px] font-bold ${typeInfo.bgClass}">
+                    <i class="fa-solid ${typeInfo.icon}"></i>
+                    <span>${escapeHTML(typeInfo.title)}</span>
+                  </div>
+                  ${timingText ? `<div class="text-slate-600 dark:text-slate-400 mt-1 font-medium">${timingText}</div>` : ''}
+                </div>
+              </div>
+              <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-1.5">
+                <span class="text-slate-500 font-medium">القسم:</span>
+                <span class="font-bold text-slate-800 dark:text-slate-200">${escapeHTML(emp.department || 'عام')}</span>
+              </div>
+              <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-1.5">
+                <span class="text-slate-500 font-medium">تاريخ التقديم:</span>
+                <span class="font-mono text-slate-700 dark:text-slate-300">${escapeHTML(req.createdAt || '--')}</span>
+              </div>
+              <div class="border-b border-slate-100 dark:border-slate-800 pb-2">
+                <span class="text-slate-500 font-medium block mb-1">مبرر الطلب والملاحظات:</span>
+                <p class="text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700">${escapeHTML(req.reason || 'لا توجد ملاحظات')}</p>
+                ${managerReplySnippet ? `<div class="mt-2">${managerReplySnippet}</div>` : ''}
+              </div>
+              <div class="pt-1 flex flex-col gap-2">
+                <span class="text-slate-500 font-medium">اتخاذ قرار:</span>
+                <div>${actionButtons}</div>
+              </div>
+            </div>
+          </td>
         </tr>
       `;
     }).join('');
@@ -4316,27 +4765,28 @@
     }
 
     if (pending.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-xs text-slate-500 font-medium">لا توجد طلبات موظفين جديدة في الانتظار حالياً</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" class="text-center py-8 text-xs text-slate-500 font-medium">لا توجد طلبات موظفين جديدة في الانتظار حالياً</td></tr>`;
       return;
     }
 
-    tbody.innerHTML = pending.map(c => {
+    tbody.innerHTML = pending.map((c, idx) => {
+      const childId = `approval-child-${idx}-${c.id || Date.now()}`;
       return `
-        <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors">
-          <td class="p-3">
+        <tr class="table-parent-row hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors cursor-pointer md:cursor-default" data-child-id="${childId}">
+          <td class="p-2.5 sm:p-3">
             <div class="font-bold text-slate-900 dark:text-white text-xs sm:text-sm">${escapeHTML(c.fullName)}</div>
             <div class="text-[11px] text-blue-600 dark:text-blue-400 font-mono mt-0.5">${escapeHTML(c.email || 'غير مسجل')} • ${escapeHTML(c.phone || '')}</div>
           </td>
-          <td class="p-3 font-mono font-black text-blue-600 dark:text-blue-400 text-xs sm:text-sm">${escapeHTML(getEmployeeCode(c))}</td>
-          <td class="p-3 font-bold text-slate-700 dark:text-slate-300 text-xs">${escapeHTML(c.department || 'عام')}</td>
-          <td class="p-3 font-mono text-xs text-slate-600 dark:text-slate-400">${escapeHTML(c.hireDate || c.registeredAt?.split('T')[0] || 'اليوم')}</td>
-          <td class="p-3">
-            <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800 flex items-center gap-1 w-max">
+          <td class="p-3 font-mono font-black text-blue-600 dark:text-blue-400 text-xs sm:text-sm hidden md:table-cell">${escapeHTML(getEmployeeCode(c))}</td>
+          <td class="p-3 font-bold text-slate-700 dark:text-slate-300 text-xs hidden md:table-cell">${escapeHTML(c.department || 'عام')}</td>
+          <td class="p-3 font-mono text-xs text-slate-600 dark:text-slate-400 hidden lg:table-cell">${escapeHTML(c.hireDate || c.registeredAt?.split('T')[0] || 'اليوم')}</td>
+          <td class="p-2.5 sm:p-3 whitespace-nowrap text-center">
+            <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800 inline-flex items-center gap-1">
               <span class="w-1.5 h-1.5 rounded-full bg-amber-500 badge-live-pulse"></span>
               قيد المراجعة والاعتماد
             </span>
           </td>
-          <td class="p-3 text-center">
+          <td class="p-3 text-center hidden md:table-cell">
             <div class="flex items-center justify-center gap-2">
               <button class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm active:scale-95" data-action="open-approval" data-id="${escapeHTML(c.id)}">
                 <i class="fa-solid fa-user-check"></i>
@@ -4346,6 +4796,42 @@
                 <i class="fa-solid fa-ban"></i>
                 <span>رفض</span>
               </button>
+            </div>
+          </td>
+          <td class="p-2 sm:p-2.5 text-center md:hidden">
+            <button class="row-expand-btn" data-action="toggle-child-row" data-target="${childId}" title="عرض باقي التفاصيل والاعتماد" aria-label="عرض باقي التفاصيل">
+              <i class="fa-solid fa-chevron-down text-xs"></i>
+            </button>
+          </td>
+        </tr>
+        <tr id="${childId}" class="responsive-child-row hidden bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700">
+          <td colspan="7" class="p-2.5 sm:p-3">
+            <div class="responsive-child-card p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-sm space-y-2.5 text-xs">
+              <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-1.5">
+                <span class="text-slate-500 font-medium">كود الموظف:</span>
+                <span class="font-mono font-bold text-blue-600 dark:text-blue-400">${escapeHTML(getEmployeeCode(c))}</span>
+              </div>
+              <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-1.5">
+                <span class="text-slate-500 font-medium">القسم المبدئي:</span>
+                <span class="font-bold text-slate-800 dark:text-slate-200">${escapeHTML(c.department || 'عام')}</span>
+              </div>
+              <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-1.5">
+                <span class="text-slate-500 font-medium">تاريخ التسجيل:</span>
+                <span class="font-mono text-slate-700 dark:text-slate-300">${escapeHTML(c.hireDate || c.registeredAt?.split('T')[0] || 'اليوم')}</span>
+              </div>
+              <div class="pt-1 flex flex-col gap-2">
+                <span class="text-slate-500 font-medium">إجراءات الاعتماد:</span>
+                <div class="flex items-center gap-2 flex-wrap">
+                  <button class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm active:scale-95" data-action="open-approval" data-id="${escapeHTML(c.id)}">
+                    <i class="fa-solid fa-user-check"></i>
+                    <span>اعتماد وتحديد الصلاحية</span>
+                  </button>
+                  <button class="px-2.5 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 hover:bg-rose-100 border border-rose-300 dark:border-rose-900 font-bold text-xs flex items-center gap-1 transition-colors" data-action="reject-candidate" data-id="${escapeHTML(c.id)}" title="رفض الطلب">
+                    <i class="fa-solid fa-ban"></i>
+                    <span>رفض</span>
+                  </button>
+                </div>
+              </div>
             </div>
           </td>
         </tr>
@@ -4406,22 +4892,69 @@
       resetPin();
     });
 
-    // Scanner Widget Click & Button Punch
+    // Scanner Widget Click & Button Punch (WebAuthn Local Device Biometrics)
     const executeFingerprintScan = async () => {
       const selectedEmpId = kioskEmpSelect?.value;
       if (!selectedEmpId) {
-        showToast('يرجى اختيار موظف للمحاكاة', 'warning');
+        showToast('يرجى اختيار موظف للتحقق من البصمة', 'warning');
         return;
       }
 
+      // 1. التحقق أولاً مما إذا كان الجهاز يدعم البصمة الحيوية
+      let isBioSupported = false;
+      if (window.PublicKeyCredential && typeof window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable === 'function') {
+        try {
+          isBioSupported = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+        } catch (e) {
+          isBioSupported = false;
+        }
+      }
+
+      // 2. إذا كان الجهاز لا يدعم البصمة -> تطبيق الـ Fallback
+      if (!isBioSupported || !navigator.credentials || !navigator.credentials.get) {
+        scannerWidget?.classList.remove('scanning');
+        sound.playAlert();
+        modePinBtn?.click();
+        showToast('تعذر التحقق من البصمة، يرجى إدخال رمز الـ PIN', 'warning', 4000);
+        return;
+      }
+
+      // 3. استدعاء واجهة البصمة الأصلية للجهاز باستخدام WebAuthn
       scannerWidget?.classList.add('scanning');
       sound.playClick();
 
-      setTimeout(async () => {
+      try {
+        const challenge = new Uint8Array(32);
+        if (window.crypto && window.crypto.getRandomValues) {
+          window.crypto.getRandomValues(challenge);
+        }
+
+        const requestOptions = {
+          publicKey: {
+            challenge: challenge,
+            timeout: 60000,
+            userVerification: 'required'
+          }
+        };
+
+        if (window.location && window.location.hostname && window.location.hostname !== '') {
+          requestOptions.publicKey.rpId = window.location.hostname;
+        }
+
+        const credential = await navigator.credentials.get(requestOptions);
         scannerWidget?.classList.remove('scanning');
+
+        // في حال نجاح البصمة (Success):
         const res = await ApiService.loginWithFingerprint(selectedEmpId, true);
         handlePunchResult(res);
-      }, 700);
+      } catch (bioErr) {
+        // في حال الفشل أو تراجع المستخدم (Fallback):
+        console.warn('[WebAuthn Kiosk Fingerprint Fallback]:', bioErr);
+        scannerWidget?.classList.remove('scanning');
+        sound.playAlert();
+        modePinBtn?.click();
+        showToast('تعذر التحقق من البصمة، يرجى إدخال رمز الـ PIN', 'warning', 4000);
+      }
     };
 
     scannerWidget?.addEventListener('click', executeFingerprintScan);
@@ -5955,7 +6488,7 @@
     const settings = store.state.settings || {};
 
     // Header info
-    document.getElementById('slipCompanyName').textContent = settings.companyName || 'شركة النيل للحلول الرقمية والتكنولوجيا (ش.م.م - مصر)';
+    document.getElementById('slipCompanyName').textContent = settings.companyName || 'AE (HR-SYSTEM)';
     document.getElementById('slipCR').textContent = settings.commercialRegister || '184920';
     document.getElementById('slipTax').textContent = settings.taxNumber || '492-710-853';
     document.getElementById('slipMonthTitle').textContent = p.month;
@@ -6933,7 +7466,7 @@
     // 12. Authenticate & Select Initial Portal (Session Check)
     await checkInitialSession();
 
-    console.log('✅ Jisr RBAC HR & Payroll System successfully initialized with ES2024+ reactive architecture.');
+    console.log('✅ AE (HR-SYSTEM) RBAC HR & Payroll System successfully initialized with ES2024+ reactive architecture.');
   }
 
   // Self Boot

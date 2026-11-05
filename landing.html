@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>نظام جسور للموارد البشرية والرواتب | تسجيل الشركات والمشتركين الجدد (SaaS)</title>
+  
+  <!-- Google Fonts: Cairo -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Cairo', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              50: '#f5f3ff',
+              100: '#ede9fe',
+              500: '#8b5cf6',
+              600: '#7c3aed',
+              700: '#6d28d9',
+              900: '#4c1d95',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body {
+      font-family: 'Cairo', sans-serif;
+    }
+    .glass-card {
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(139, 92, 246, 0.2);
+    }
+    .glow-purple {
+      box-shadow: 0 0 35px -5px rgba(139, 92, 246, 0.3);
+    }
+    .bg-grid-pattern {
+      background-image: radial-gradient(rgba(139, 92, 246, 0.15) 1px, transparent 1px);
+      background-size: 30px 30px;
+    }
+  </style>
+
+  <!-- Supabase CDN Client -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col selection:bg-purple-600 selection:text-white bg-grid-pattern relative overflow-x-hidden">
+
+  <!-- Ambient Background Lighting Glows -->
+  <div class="absolute -top-40 right-1/4 w-96 h-96 bg-purple-600/20 rounded-full blur-3xl pointer-events-none"></div>
+  <div class="absolute top-1/3 -left-20 w-80 h-80 bg-blue-600/15 rounded-full blur-3xl pointer-events-none"></div>
+  <div class="absolute -bottom-20 right-10 w-96 h-96 bg-emerald-600/10 rounded-full blur-3xl pointer-events-none"></div>
+
+  <!-- Top Navigation Header -->
+  <header class="border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+      
+      <!-- Brand Logo -->
+      <a href="landing.html" class="flex items-center gap-3">
+        <div class="w-11 h-11 rounded-2xl bg-gradient-to-tr from-purple-600 via-indigo-600 to-blue-500 flex items-center justify-center text-white shadow-lg shadow-purple-500/25">
+          <i class="fa-solid fa-fingerprint text-2xl"></i>
+        </div>
+        <div>
+          <span class="text-xl font-black tracking-tight text-white flex items-center gap-1.5">
+            <span>جُسور</span>
+            <span class="text-[10px] px-2 py-0.5 rounded-full bg-purple-900/60 text-purple-300 border border-purple-700/50 font-mono font-bold">Cloud SaaS</span>
+          </span>
+          <p class="text-[11px] text-slate-400 font-medium">نظام الموارد البشرية والرواتب السحابي</p>
+        </div>
+      </a>
+
+      <!-- Quick Actions -->
+      <div class="flex items-center gap-3">
+        <a href="#registerSection" class="hidden sm:inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-800/60 transition-colors">
+          <span>المميزات والاشتراك</span>
+        </a>
+        <a href="index.html" class="px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs sm:text-sm shadow-md shadow-purple-500/20 flex items-center gap-2 transition-all active:scale-95">
+          <i class="fa-solid fa-right-to-bracket text-xs"></i>
+          <span>دخول النظام</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Hero & Registration Container -->
+  <main class="flex-1 flex flex-col justify-center py-12 sm:py-16 px-4 sm:px-6 lg:px-8 relative z-10">
+    <div class="max-w-5xl mx-auto w-full space-y-12">
+
+      <!-- Hero Header -->
+      <div class="text-center space-y-4 max-w-3xl mx-auto">
+        <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold bg-purple-950/80 text-purple-300 border border-purple-800/60 shadow-inner">
+          <span class="w-2 h-2 rounded-full bg-purple-400 animate-ping"></span>
+          <span>منظومة متكاملة متعددة المنشآت (Multi-Tenant Cloud HR)</span>
+        </div>
+        <h1 class="text-3xl sm:text-5xl font-black text-white leading-tight">
+          انضم إلى <span class="bg-gradient-to-r from-purple-400 via-indigo-300 to-blue-400 bg-clip-text text-transparent">نظام جُسور</span> لإدارة الموارد البشرية
+        </h1>
+        <p class="text-sm sm:text-base text-slate-300 leading-relaxed max-w-2xl mx-auto">
+          سجّل شركتك الآن للتمتع بنظام سحابي ذكي للبصمة البيومترية، الحضور الجغرافي (GPS)، وإدارة مسيرات الرواتب المتوافقة مع أنظمة العمل.
+        </p>
+      </div>
+
+      <!-- Registration Form & Success State Card -->
+      <div id="registerSection" class="glass-card rounded-3xl p-6 sm:p-10 glow-purple max-w-2xl mx-auto border border-purple-500/30">
+        
+        <!-- ============================================================ -->
+        <!-- 1. FORM STATE: Company Registration Form -->
+        <!-- ============================================================ -->
+        <form id="companyRegistrationForm" class="space-y-6">
+          <div class="border-b border-slate-800 pb-4 flex items-center justify-between">
+            <div>
+              <h2 class="text-lg sm:text-xl font-black text-white flex items-center gap-2">
+                <i class="fa-solid fa-building-circle-check text-purple-400"></i>
+                <span>طلب تسجيل منشأة جديدة</span>
+              </h2>
+              <p class="text-xs text-slate-400 mt-1">أدخل بيانات الشركة وحساب المدير المعتمد للبدء</p>
+            </div>
+            <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-purple-900/40 text-purple-300 border border-purple-700/40">خطوة واحدة فقط</span>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            
+            <!-- Company Name -->
+            <div class="sm:col-span-2">
+              <label for="companyName" class="block text-xs font-bold text-slate-200 mb-1.5">
+                اسم الشركة أو المنشأة الرسمي <span class="text-rose-400">*</span>
+              </label>
+              <div class="relative">
+                <i class="fa-solid fa-building absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                <input type="text" id="companyName" required placeholder="مثال: شركة الأفق لتقنية المعلومات" class="w-full pr-10 pl-3.5 py-2.5 rounded-xl text-xs sm:text-sm bg-slate-900/90 text-white border border-slate-700 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/30 transition-all font-bold placeholder:text-slate-500">
+              </div>
+            </div>
+
+            <!-- Tax Number -->
+            <div>
+              <label for="taxNumber" class="block text-xs font-bold text-slate-200 mb-1.5">
+                الرقم الضريبي أو السجل التجاري <span class="text-slate-400 text-[10px]">(اختياري)</span>
+              </label>
+              <div class="relative">
+                <i class="fa-solid fa-file-invoice absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                <input type="text" id="taxNumber" placeholder="مثال: 492-710-853" class="w-full pr-10 pl-3.5 py-2.5 rounded-xl text-xs sm:text-sm bg-slate-900/90 text-white border border-slate-700 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/30 transition-all font-mono font-medium placeholder:text-slate-500">
+              </div>
+            </div>
+
+            <!-- Manager Name -->
+            <div>
+              <label for="managerName" class="block text-xs font-bold text-slate-200 mb-1.5">
+                اسم المدير المسؤول (Admin) <span class="text-rose-400">*</span>
+              </label>
+              <div class="relative">
+                <i class="fa-solid fa-user-tie absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                <input type="text" id="managerName" required placeholder="مثال: م. أحمد عبد الله" class="w-full pr-10 pl-3.5 py-2.5 rounded-xl text-xs sm:text-sm bg-slate-900/90 text-white border border-slate-700 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/30 transition-all font-bold placeholder:text-slate-500">
+              </div>
+            </div>
+
+            <!-- Email -->
+            <div>
+              <label for="email" class="block text-xs font-bold text-slate-200 mb-1.5">
+                البريد الإلكتروني الرسمي للمدير <span class="text-rose-400">*</span>
+              </label>
+              <div class="relative">
+                <i class="fa-solid fa-envelope absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                <input type="email" id="email" required placeholder="manager@company.com" class="w-full pr-10 pl-3.5 py-2.5 rounded-xl text-xs sm:text-sm bg-slate-900/90 text-white border border-slate-700 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/30 transition-all font-mono placeholder:text-slate-500">
+              </div>
+            </div>
+
+            <!-- Phone -->
+            <div>
+              <label for="phone" class="block text-xs font-bold text-slate-200 mb-1.5">
+                رقم هاتف التواصل والواتساب <span class="text-rose-400">*</span>
+              </label>
+              <div class="relative">
+                <i class="fa-solid fa-phone absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                <input type="tel" id="phone" required placeholder="مثال: 01012345678" class="w-full pr-10 pl-3.5 py-2.5 rounded-xl text-xs sm:text-sm bg-slate-900/90 text-white border border-slate-700 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/30 transition-all font-mono placeholder:text-slate-500">
+              </div>
+            </div>
+
+            <!-- Manager Secret PIN -->
+            <div class="sm:col-span-2">
+              <label for="pin" class="block text-xs font-bold text-slate-200 mb-1.5">
+                رمز PIN السري لدخول المدير (4 إلى 6 أرقام) <span class="text-rose-400">*</span>
+              </label>
+              <div class="relative">
+                <i class="fa-solid fa-key absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                <input type="password" id="pin" required maxlength="6" minlength="4" placeholder="••••" class="w-full pr-10 pl-3.5 py-2.5 rounded-xl text-xs sm:text-sm bg-slate-900/90 text-white border border-slate-700 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/30 transition-all font-mono text-center tracking-widest text-base font-bold placeholder:text-slate-500">
+              </div>
+              <p class="text-[11px] text-slate-400 mt-1">يُستخدم هذا الرمز السري لتسجيل دخول المدير عبر بوابة البصمة ورمز الـ PIN السريع.</p>
+            </div>
+
+          </div>
+
+          <!-- Submit Button -->
+          <div class="pt-2">
+            <button type="submit" class="w-full py-3.5 px-6 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-700 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-sm sm:text-base shadow-xl shadow-purple-600/30 flex items-center justify-center gap-2.5 transition-all active:scale-98">
+              <i class="fa-solid fa-rocket"></i>
+              <span>تسجيل الشركة وبدء الاستخدام</span>
+            </button>
+          </div>
+
+          <div class="text-center text-xs text-slate-400">
+            بالتسجيل، أنت توافق على شروط الخدمة وسياسة الخصوصية الخاصة بنظام جسور السحابي.
+          </div>
+        </form>
+
+        <!-- ============================================================ -->
+        <!-- 2. SUCCESS STATE: Confirmation Message (Initially Hidden) -->
+        <!-- ============================================================ -->
+        <div id="successMessage" class="hidden text-center py-6 sm:py-8 space-y-6">
+          <div class="w-20 h-20 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center mx-auto text-4xl shadow-lg shadow-emerald-500/20 animate-bounce">
+            <i class="fa-solid fa-circle-check"></i>
+          </div>
+
+          <div class="space-y-2">
+            <h3 class="text-2xl font-black text-white">تم استلام طلب تسجيل شركتكم بنجاح!</h3>
+            <p class="text-sm text-slate-300 max-w-md mx-auto leading-relaxed">
+              طلبكم الآن قيد المراجعة والاعتماد الفوري من قبل الإدارة العليا (Super Admin). بمجرد الاعتماد، سيتم تفعيل حساب شركتكم وتعيين المدير بصلاحية Admin كاملة.
+            </p>
+          </div>
+
+          <div class="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 text-right max-w-md mx-auto text-xs space-y-2">
+            <div class="flex items-center gap-2 text-purple-400 font-bold">
+              <i class="fa-solid fa-circle-info"></i>
+              <span>الخطوات التالية:</span>
+            </div>
+            <ul class="list-disc list-inside text-slate-400 space-y-1 pr-2">
+              <li>سيقوم مسؤول النظام بمراجعة بيانات الشركة وتفعيلها.</li>
+              <li>يمكن للمدير تسجيل الدخول مباشرة فور التفعيل باستخدام رمز الـ PIN والبريد المسجل.</li>
+            </ul>
+          </div>
+
+          <div class="pt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
+            <a href="index.html" class="w-full sm:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs sm:text-sm shadow-md shadow-purple-500/20 flex items-center justify-center gap-2 transition-all">
+              <i class="fa-solid fa-arrow-left"></i>
+              <span>الانتقال لبوابة تسجيل الدخول</span>
+            </a>
+            <button type="button" onclick="location.reload()" class="w-full sm:w-auto px-5 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition-colors">
+              تسجيل شركة أخرى
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Feature Badges Grid -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-6">
+        <div class="glass-card rounded-2xl p-4 sm:p-5 text-center space-y-2 border border-slate-800">
+          <div class="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center mx-auto text-lg">
+            <i class="fa-solid fa-shield-halved"></i>
+          </div>
+          <h4 class="text-xs sm:text-sm font-bold text-white">عزل بيانات كامل (Multi-Tenant)</h4>
+          <p class="text-[11px] text-slate-400">بيانات شركتك وموظفيك مشفرة ومستقلة تماماً في قاعدة بيانات سحابية آمنة.</p>
+        </div>
+
+        <div class="glass-card rounded-2xl p-4 sm:p-5 text-center space-y-2 border border-slate-800">
+          <div class="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center mx-auto text-lg">
+            <i class="fa-solid fa-map-location-dot"></i>
+          </div>
+          <h4 class="text-xs sm:text-sm font-bold text-white">تحكم جغرافي وبصمة ذكية</h4>
+          <p class="text-[11px] text-slate-400">إثبات حضور الموظفين عبر الموقع الجغرافي (GPS Geofence) أو رمز الـ PIN المباشر.</p>
+        </div>
+
+        <div class="glass-card rounded-2xl p-4 sm:p-5 text-center space-y-2 border border-slate-800">
+          <div class="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center mx-auto text-lg">
+            <i class="fa-solid fa-calculator"></i>
+          </div>
+          <h4 class="text-xs sm:text-sm font-bold text-white">مسيرات رواتب تلقائية</h4>
+          <p class="text-[11px] text-slate-400">احتساب فوري للتأخيرات والغياب والإضافي والتأمينات وفقاً لقوانين العمل الرسمية.</p>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-800/80 bg-slate-950/90 py-6 text-center text-xs text-slate-500">
+    <div class="max-w-7xl mx-auto px-4 flex flex-wrap items-center justify-between gap-4">
+      <div>نظام جُسور لإدارة الموارد البشرية والرواتب &copy; 2026. كافة الحقوق محفوظة.</div>
+      <div class="flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+        <span class="text-slate-400 font-mono">Cloud Multi-Tenant SaaS v2.4</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Include api.js to expose ApiService -->
+  <script src="api.js"></script>
+
+  <!-- Registration Submission Script -->
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const regForm = document.getElementById('companyRegistrationForm');
+      if (!regForm) return;
+
+      regForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const companyName = document.getElementById('companyName').value.trim();
+        const taxNumber = document.getElementById('taxNumber').value.trim();
+        const managerName = document.getElementById('managerName').value.trim();
+        const phone = document.getElementById('phone').value.trim();
+        const email = document.getElementById('email').value.trim();
+        const pin = document.getElementById('pin').value.trim();
+
+        const submitBtn = regForm.querySelector('button[type="submit"]');
+        const origBtnText = submitBtn ? submitBtn.innerHTML : '';
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin ml-2"></i> جاري إرسال الطلب...';
+        }
+
+        try {
+          // استدعاء مباشر لدالة الـ API الخاصة بنا
+          const res = await ApiService.registerNewTenant({
+              companyName: companyName,
+              taxNumber: taxNumber,
+              managerName: managerName,
+              phone: phone,
+              email: email,
+              pin: pin
+          });
+
+          if(res.success) {
+              document.getElementById('companyRegistrationForm').classList.add('hidden');
+              document.getElementById('successMessage').classList.remove('hidden');
+          } else {
+              alert(res.message || 'حدث خطأ أثناء تسجيل الشركة');
+              if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = origBtnText;
+              }
+          }
+        } catch (err) {
+          console.error(err);
+          alert('حدث خطأ غير متوقع: ' + (err.message || err));
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = origBtnText;
+          }
+        }
+      });
+    });
+  </script>
+</body>
+</html>

@@ -2,8 +2,19 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>نظام جسور للموارد البشرية والرواتب | Jisr Attendance & Payroll System</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>نظام AE (HR-SYSTEM) للموارد البشرية والرواتب | AE (HR-SYSTEM)</title>
+  
+  <!-- Progressive Web App (PWA) Meta & Manifest -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#2563eb">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="AE (HR-SYSTEM)">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
   
   <!-- Immediate Theme Initializer to prevent contrast flash -->
   <script>
@@ -77,7 +88,7 @@
         <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-700 via-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
           <i class="fa-solid fa-fingerprint text-lg"></i>
         </div>
-        <span class="font-black text-slate-900 dark:text-white text-base tracking-tight">جُسـور <span class="text-blue-600 dark:text-blue-400 text-xs font-bold">HR Enterprise</span></span>
+        <span class="font-black text-slate-900 dark:text-white text-base tracking-tight">AE <span class="text-blue-600 dark:text-blue-400 text-xs font-bold">(HR-SYSTEM)</span></span>
       </div>
       <div class="flex items-center gap-2">
         <button id="authSoundToggleBtn" aria-label="كتم / تشغيل المؤثرات الصوتية" class="w-8 h-8 rounded-lg border border-slate-300 dark:border-slate-700 bg-white/80 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 hover:text-blue-600 flex items-center justify-center transition-colors">
@@ -212,11 +223,19 @@
       </div>
 
       <!-- New Employee Onboarding Button -->
-      <div class="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700/80">
+      <div class="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700/80 space-y-2.5">
         <button id="openOnboardingBtn" class="w-full py-3 rounded-2xl border-2 border-dashed border-blue-400/60 dark:border-blue-500/40 bg-blue-50/60 dark:bg-blue-950/30 hover:bg-blue-100/80 dark:hover:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-extrabold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-sm">
           <i class="fa-solid fa-user-plus text-base"></i>
           تسجيل موظف جديد (انضمام إلى فريق العمل)
         </button>
+
+        <div class="text-center pt-1">
+          <a href="landing.html" class="inline-flex items-center gap-1.5 text-xs font-bold text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 transition-colors py-1 px-2.5 rounded-lg hover:bg-purple-50 dark:hover:bg-purple-950/40">
+            <i class="fa-solid fa-building text-[11px]"></i>
+            <span>هل أنت منشأة جديدة؟ سجّل شركتك بالنظام الآن</span>
+            <i class="fa-solid fa-arrow-left text-[10px]"></i>
+          </a>
+        </div>
       </div>
 
     </div>
@@ -238,7 +257,7 @@
           </div>
           <div>
             <div class="flex items-center gap-2">
-              <span class="text-base sm:text-lg font-black tracking-tight text-slate-900 dark:text-white">جُسـور <span class="text-blue-600 dark:text-blue-400 font-bold text-xs">بوابة الموظف الذاتية</span></span>
+              <span class="text-base sm:text-lg font-black tracking-tight text-slate-900 dark:text-white">AE (HR-SYSTEM) <span class="text-blue-600 dark:text-blue-400 font-bold text-xs">بوابة الموظف الذاتية</span></span>
               <span id="empUserRoleBadge" class="px-2 py-0.5 text-xs font-bold rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
                 موظف
               </span>
@@ -621,7 +640,7 @@
 
     <!-- Footer -->
     <footer class="glass-panel border-t border-slate-200 dark:border-slate-800 text-slate-500 text-xs py-4 px-6 text-center bg-white dark:bg-slate-900 mt-8">
-      نظام جسور للموارد البشرية والرواتب &copy; 2026. بوابة الموظف الذاتية الموثقة.
+      نظام AE (HR-SYSTEM) للموارد البشرية والرواتب &copy; 2026. بوابة الموظف الذاتية الموثقة.
     </footer>
 
   </div>
@@ -647,7 +666,7 @@
           </div>
           <div>
             <div class="flex items-center gap-2">
-              <span class="text-base sm:text-lg lg:text-xl font-black tracking-tight text-slate-900 dark:text-white">جُسـور <span class="text-blue-600 dark:text-blue-400 font-bold text-xs sm:text-sm tracking-normal">لإدارة الحضور والرواتب</span></span>
+              <span class="text-base sm:text-lg lg:text-xl font-black tracking-tight text-slate-900 dark:text-white">AE (HR-SYSTEM) <span class="text-blue-600 dark:text-blue-400 font-bold text-xs sm:text-sm tracking-normal">لإدارة الحضور والرواتب</span></span>
               <span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 hidden sm:flex items-center gap-1.5">
                 <span class="w-2 h-2 rounded-full bg-emerald-500 badge-live-pulse" aria-hidden="true"></span>
                 النظام نشط
@@ -1893,7 +1912,8 @@
           </button>
           <button type="button" id="progTabCompanyBtn" class="prog-sub-tab flex-1 min-w-[140px] px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">
             <i class="fa-solid fa-building-circle-gear text-sm"></i>
-            <span>إعدادات الشركة</span>
+            <span>إدارة الشركات والمشتركين</span>
+            <span id="progTenantsPendingBadge" class="hidden px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500 text-white animate-pulse">0</span>
           </button>
         </div>
 
@@ -2210,11 +2230,107 @@
         </div>
 
         <!-- ============================================================== -->
-        <!-- SUB-SCREEN 4: COMPANY SETTINGS (إعدادات وهوية الشركة) -->
+        <!-- SUB-SCREEN 4: TENANTS & COMPANIES MANAGEMENT (إدارة الشركات والمشتركين) -->
         <!-- ============================================================== -->
         <div id="progTabPaneCompany" class="prog-tab-pane hidden space-y-6">
 
-          <form id="progCompanySettingsForm" class="space-y-6">
+          <!-- KPI Stats Header for Tenants -->
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+            <div class="glass-panel p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
+              <div>
+                <span class="text-xs text-slate-500 dark:text-slate-400 font-bold block mb-1">إجمالي الشركات المسجلة</span>
+                <span id="progTenantsTotalCount" class="text-xl sm:text-2xl font-mono font-black text-slate-900 dark:text-white">0</span>
+              </div>
+              <div class="w-12 h-12 rounded-xl bg-purple-100 dark:bg-purple-950/70 text-purple-600 dark:text-purple-400 flex items-center justify-center text-xl shrink-0">
+                <i class="fa-solid fa-buildings"></i>
+              </div>
+            </div>
+
+            <div class="glass-panel p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
+              <div>
+                <span class="text-xs text-slate-500 dark:text-slate-400 font-bold block mb-1">الشركات المفعلة والنشطة</span>
+                <span id="progTenantsActiveCount" class="text-xl sm:text-2xl font-mono font-black text-emerald-600 dark:text-emerald-400">0</span>
+              </div>
+              <div class="w-12 h-12 rounded-xl bg-emerald-100 dark:bg-emerald-950/70 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-xl shrink-0">
+                <i class="fa-solid fa-circle-check"></i>
+              </div>
+            </div>
+
+            <div class="glass-panel p-4 rounded-2xl bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-900/60 bg-amber-50/20 dark:bg-amber-950/10 shadow-sm flex items-center justify-between">
+              <div>
+                <span class="text-xs text-amber-700 dark:text-amber-400 font-bold block mb-1">طلبات بالانتظار (Pending)</span>
+                <span id="progTenantsPendingCount" class="text-xl sm:text-2xl font-mono font-black text-amber-600 dark:text-amber-400">0</span>
+              </div>
+              <div class="w-12 h-12 rounded-xl bg-amber-100 dark:bg-amber-950/70 text-amber-600 dark:text-amber-400 flex items-center justify-center text-xl shrink-0">
+                <i class="fa-solid fa-hourglass-half"></i>
+              </div>
+            </div>
+          </div>
+
+          <!-- Master Tenants Table Card -->
+          <div class="glass-panel rounded-2xl p-4 sm:p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-md space-y-4">
+            
+            <!-- Controls & Search Toolbar -->
+            <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+              <div class="flex items-center gap-2.5 flex-1 flex-wrap sm:flex-nowrap">
+                <div class="relative flex-1 min-w-[200px]">
+                  <i class="fa-solid fa-magnifying-glass absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                  <input type="text" id="progTenantsSearch" placeholder="بحث باسم الشركة، المدير، أو البريد..." class="w-full pr-9 pl-3 py-2 rounded-xl text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 focus:ring-2 focus:ring-purple-500 font-medium">
+                </div>
+
+                <select id="progTenantsStatusFilter" class="px-3 py-2 rounded-xl text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 font-bold">
+                  <option value="all">كل الحالات</option>
+                  <option value="pending">طلبات بالانتظار (Pending)</option>
+                  <option value="active">شركات نشطة (Active)</option>
+                </select>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <a href="landing.html" target="_blank" class="px-3 py-2 rounded-xl bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/60 border border-purple-200 dark:border-purple-800 text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm">
+                  <i class="fa-solid fa-arrow-up-right-from-square"></i>
+                  <span>صفحة التسجيل (Landing)</span>
+                </a>
+                <button type="button" id="progRefreshTenantsBtn" class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm">
+                  <i class="fa-solid fa-rotate"></i>
+                  <span>تحديث</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Table Container with Zero Horizontal Scroll for Mobile -->
+            <div class="w-full overflow-x-hidden md:overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+              <table class="w-full text-right border-collapse text-xs sm:text-sm table-adaptive">
+                <thead>
+                  <tr class="bg-slate-100 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200 border-b border-slate-200 dark:border-slate-700 font-bold">
+                    <th class="p-2.5 sm:p-3.5">اسم الشركة والرقم الضريبي</th>
+                    <th class="p-2.5 sm:p-3.5">بيانات المدير المسؤول</th>
+                    <th class="p-2.5 sm:p-3.5 hidden md:table-cell whitespace-nowrap">الإيميل والهاتف</th>
+                    <th class="p-2.5 sm:p-3.5 hidden lg:table-cell whitespace-nowrap">تاريخ التسجيل</th>
+                    <th class="p-2.5 sm:p-3.5 whitespace-nowrap text-center">الحالة</th>
+                    <th class="p-2.5 sm:p-3.5 text-center hidden md:table-cell whitespace-nowrap">الإجراءات والتحكم</th>
+                    <th class="p-2.5 sm:p-3.5 text-center md:hidden w-12 text-purple-600 dark:text-purple-400" title="عرض باقي التفاصيل والإجراءات">المزيد</th>
+                  </tr>
+                </thead>
+                <tbody id="progTenantsTableBody" class="divide-y divide-slate-200 dark:divide-slate-800">
+                  <!-- Dynamically populated companies -->
+                </tbody>
+              </table>
+            </div>
+
+          </div>
+
+          <!-- Secondary Collapsible Section: إعدادات وهوية الشركة الافتراضية -->
+          <div class="glass-panel p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+            <details class="group">
+              <summary class="cursor-pointer list-none flex items-center justify-between text-xs sm:text-sm font-extrabold text-slate-800 dark:text-slate-200 select-none">
+                <span class="flex items-center gap-2">
+                  <i class="fa-solid fa-sliders text-purple-600 dark:text-purple-400"></i>
+                  <span>إعدادات وهوية الشركة الافتراضية للنظام (البيانات المؤسسية، العملة، الشعار)</span>
+                </span>
+                <i class="fa-solid fa-chevron-down text-slate-400 group-open:rotate-180 transition-transform"></i>
+              </summary>
+              <div class="mt-5 pt-5 border-t border-slate-100 dark:border-slate-800">
+                <form id="progCompanySettingsForm" class="space-y-6">
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
               <!-- Card 1: Official Corporate Profile -->
@@ -2331,6 +2447,9 @@
               </button>
             </div>
           </form>
+              </div>
+            </details>
+          </div>
 
         </div>
 
@@ -2814,7 +2933,7 @@
         <!-- Company Letterhead -->
         <div class="flex justify-between items-center border-b-2 border-slate-900 pb-4 mb-4">
           <div class="text-right">
-            <h2 id="slipCompanyName" class="text-base sm:text-lg font-black text-slate-900">شركة النيل للحلول الرقمية والتكنولوجيا (ش.م.م - مصر)</h2>
+            <h2 id="slipCompanyName" class="text-base sm:text-lg font-black text-slate-900">AE (HR-SYSTEM)</h2>
             <p class="text-xs text-slate-700 font-semibold">جمهورية مصر العربية | قطاع الشؤون الإدارية والموارد البشرية</p>
             <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600 mt-1 font-mono font-bold tabular-nums num-display">
               <span>س.ت: <strong id="slipCR" class="text-slate-900">184920</strong> (مكتب استثمار القاهرة)</span>
@@ -3827,5 +3946,20 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="api.js?v=geofix_1"></script>
   <script src="app.js?v=geofix_1"></script>
+
+  <!-- PWA Service Worker Registration -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then((reg) => {
+            console.log('[PWA] Service Worker registered successfully with scope:', reg.scope);
+          })
+          .catch((err) => {
+            console.error('[PWA] Service Worker registration failed:', err);
+          });
+      });
+    }
+  </script>
 </body>
 </html>
