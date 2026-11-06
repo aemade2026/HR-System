@@ -84,11 +84,14 @@
 
     <!-- Top Floating Header Toolbar for Auth Portal -->
     <div class="absolute top-4 inset-x-4 max-w-5xl mx-auto flex items-center justify-between z-20 pointer-events-auto">
-      <div class="flex items-center gap-2.5">
-        <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-700 via-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
-          <i class="fa-solid fa-fingerprint text-lg"></i>
+      <div class="flex items-center gap-3 group">
+        <div class="w-10 h-10 rounded-xl p-0.5 bg-gradient-to-tr from-cyan-400 via-blue-600 to-indigo-600 shadow-md shadow-blue-500/20 flex items-center justify-center shrink-0">
+          <img src="icon.svg" alt="AE" class="w-full h-full object-contain rounded-[10px]">
         </div>
-        <span class="font-black text-slate-900 dark:text-white text-base tracking-tight">AE <span class="text-blue-600 dark:text-blue-400 text-xs font-bold">(HR-SYSTEM)</span></span>
+        <div class="flex items-center gap-1.5">
+          <span class="font-black text-slate-900 dark:text-white text-base tracking-tight font-mono bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 dark:from-cyan-400 dark:via-blue-300 dark:to-purple-400 bg-clip-text text-transparent">AE</span>
+          <span class="text-xs font-black text-blue-600 dark:text-cyan-400 font-mono tracking-tight bg-blue-50 dark:bg-slate-800/80 px-2 py-0.5 rounded-md border border-blue-200 dark:border-cyan-500/30">(HR-SYSTEM)</span>
+        </div>
       </div>
       <div class="flex items-center gap-2">
         <button id="authSoundToggleBtn" aria-label="كتم / تشغيل المؤثرات الصوتية" class="w-8 h-8 rounded-lg border border-slate-300 dark:border-slate-700 bg-white/80 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 hover:text-blue-600 flex items-center justify-center transition-colors">
@@ -105,8 +108,12 @@
       
       <!-- Brand & Welcome -->
       <div class="text-center mb-6">
-        <div class="w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-700 via-blue-600 to-indigo-500 text-white flex items-center justify-center mx-auto mb-3 shadow-lg shadow-blue-500/30">
-          <i class="fa-solid fa-fingerprint text-3xl"></i>
+        <div class="w-20 h-20 rounded-3xl p-1 bg-gradient-to-tr from-cyan-400 via-blue-600 to-purple-600 flex items-center justify-center mx-auto mb-3.5 shadow-xl shadow-blue-500/25 transition-transform hover:scale-105">
+          <img src="icon.svg" alt="AE HR-SYSTEM" class="w-full h-full object-contain rounded-[20px]">
+        </div>
+        <div class="flex items-center justify-center gap-2 mb-1.5">
+          <span class="text-xl font-black font-mono tracking-wider bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 dark:from-cyan-400 dark:via-blue-300 dark:to-purple-400 bg-clip-text text-transparent">AE</span>
+          <span class="text-xs font-black text-blue-600 dark:text-cyan-400 font-mono bg-blue-50 dark:bg-slate-800/90 px-2 py-0.5 rounded-lg border border-blue-200 dark:border-cyan-500/30">(HR-SYSTEM)</span>
         </div>
         <h1 class="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">بوابة الدخول الذكية</h1>
         <p class="text-xs sm:text-sm text-slate-600 dark:text-slate-400 font-medium mt-1">تسجيل الدخول الحيوي بالبصمة أو الـ PIN السداسي</p>
@@ -251,13 +258,17 @@
       <div class="max-w-7xl mx-auto flex items-center justify-between gap-3">
         
         <!-- Brand & Portal Name -->
-        <div class="flex items-center gap-2.5">
-          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-700 via-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-md shadow-blue-500/20 shrink-0">
-            <i class="fa-solid fa-fingerprint text-xl"></i>
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl p-0.5 bg-gradient-to-tr from-cyan-400 via-blue-600 to-indigo-600 shadow-md shadow-blue-500/20 flex items-center justify-center shrink-0">
+            <img src="icon.svg" alt="AE" class="w-full h-full object-contain rounded-[10px]">
           </div>
           <div>
             <div class="flex items-center gap-2">
-              <span class="text-base sm:text-lg font-black tracking-tight text-slate-900 dark:text-white">AE (HR-SYSTEM) <span class="text-blue-600 dark:text-blue-400 font-bold text-xs">بوابة الموظف الذاتية</span></span>
+              <span class="text-base sm:text-lg font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-1.5">
+                <span class="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 dark:from-cyan-400 dark:via-blue-300 dark:to-purple-400 bg-clip-text text-transparent font-mono">AE</span>
+                <span class="text-xs font-black text-blue-600 dark:text-cyan-400 font-mono">(HR-SYSTEM)</span>
+                <span class="text-xs font-bold text-slate-500 dark:text-slate-400 mr-1">بوابة الموظف الذاتية</span>
+              </span>
               <span id="empUserRoleBadge" class="px-2 py-0.5 text-xs font-bold rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
                 موظف
               </span>
@@ -661,12 +672,16 @@
             <i class="fa-solid fa-bars text-base" aria-hidden="true"></i>
           </button>
 
-          <div class="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-gradient-to-tr from-blue-700 via-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-lg shadow-blue-500/20 shrink-0">
-            <i class="fa-solid fa-fingerprint text-xl sm:text-2xl" aria-hidden="true"></i>
+          <div class="w-10 h-10 sm:w-11 sm:h-11 rounded-xl p-0.5 bg-gradient-to-tr from-cyan-400 via-blue-600 to-indigo-600 shadow-lg shadow-blue-500/20 flex items-center justify-center shrink-0">
+            <img src="icon.svg" alt="AE" class="w-full h-full object-contain rounded-[10px]">
           </div>
           <div>
             <div class="flex items-center gap-2">
-              <span class="text-base sm:text-lg lg:text-xl font-black tracking-tight text-slate-900 dark:text-white">AE (HR-SYSTEM) <span class="text-blue-600 dark:text-blue-400 font-bold text-xs sm:text-sm tracking-normal">لإدارة الحضور والرواتب</span></span>
+              <span class="text-base sm:text-lg lg:text-xl font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-1.5">
+                <span class="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 dark:from-cyan-400 dark:via-blue-300 dark:to-purple-400 bg-clip-text text-transparent font-mono">AE</span>
+                <span class="text-xs sm:text-sm font-black text-blue-600 dark:text-cyan-400 font-mono">(HR-SYSTEM)</span>
+                <span class="text-xs sm:text-sm font-bold text-slate-600 dark:text-slate-300 mr-1 tracking-normal">لإدارة الحضور والرواتب</span>
+              </span>
               <span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 hidden sm:flex items-center gap-1.5">
                 <span class="w-2 h-2 rounded-full bg-emerald-500 badge-live-pulse" aria-hidden="true"></span>
                 النظام نشط
@@ -766,10 +781,13 @@
         <!-- Drawer Mobile Header (< lg) -->
         <div class="lg:hidden flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-100/70 dark:bg-slate-800/50">
           <div class="flex items-center gap-2.5">
-            <div class="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white">
-              <i class="fa-solid fa-fingerprint text-base" aria-hidden="true"></i>
+            <div class="w-8 h-8 rounded-lg p-0.5 bg-gradient-to-tr from-cyan-400 via-blue-600 to-indigo-600 flex items-center justify-center shrink-0">
+              <img src="icon.svg" alt="AE" class="w-full h-full object-contain rounded-[6px]">
             </div>
-            <span class="font-extrabold text-base text-slate-900 dark:text-white">جُسـور HR</span>
+            <div class="flex items-center gap-1 font-mono">
+              <span class="font-black text-base text-slate-900 dark:text-white">AE</span>
+              <span class="text-xs font-bold text-blue-600 dark:text-cyan-400">(HR-SYSTEM)</span>
+            </div>
           </div>
           <button id="sidebarCloseBtn" aria-label="إغلاق القائمة الجانبية" class="w-8 h-8 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white flex items-center justify-center transition-colors" title="إغلاق القائمة">
             <i class="fa-solid fa-xmark text-base" aria-hidden="true"></i>
@@ -2460,7 +2478,10 @@
     <!-- Footer -->
     <footer class="glass-panel border-t border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 text-xs py-4 px-6 mt-12 bg-white dark:bg-slate-900">
       <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
-        <div>نظام جُسور لإدارة الحضور والبصمة والرواتب &copy; 2026. كافة الحقوق محفوظة.</div>
+        <div class="flex items-center gap-2">
+          <img src="icon.svg" alt="AE" class="w-4 h-4 rounded">
+          <span>منظومة AE (HR-SYSTEM) لإدارة الحضور والبصمة والرواتب &copy; 2026. كافة الحقوق محفوظة.</span>
+        </div>
         <div class="flex items-center gap-4">
           <span>متوافق بنسبة 100% مع نظام العمل واللوائح التنفيذية</span>
           <span>•</span>
