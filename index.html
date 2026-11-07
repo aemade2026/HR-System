@@ -7,13 +7,14 @@
   
   <!-- Progressive Web App (PWA) Meta & Manifest -->
   <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#2563eb">
+  <meta name="theme-color" content="#080d1a">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="AE (HR-SYSTEM)">
-  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
   <link rel="icon" type="image/svg+xml" href="icon.svg">
   
   <!-- Immediate Theme Initializer to prevent contrast flash -->
@@ -288,6 +289,12 @@
             </button>
           </div>
 
+          <!-- PWA Install Mobile App Button (Header) -->
+          <button id="empInstallAppBtnHeader" title="تحميل وتثبيت التطبيق على الهاتف" class="px-3 py-2 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-black text-xs shadow-md shadow-indigo-500/20 flex items-center gap-1.5 transition-all active:scale-95 border border-indigo-400/30">
+            <i class="fa-solid fa-mobile-screen-button text-cyan-300"></i>
+            <span class="hidden sm:inline">تحميل التطبيق</span>
+          </button>
+
           <!-- Sound & Theme Toggles -->
           <button id="empToggleSoundBtn" aria-label="كتم / تشغيل المؤثرات الصوتية" class="w-9 h-9 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:text-blue-600 flex items-center justify-center transition-colors">
             <i class="fa-solid fa-volume-high text-sm"></i>
@@ -343,8 +350,37 @@
               <i class="fa-solid fa-file-invoice-dollar"></i>
               <span>قسيمة الراتب الرسمية</span>
             </button>
+            <!-- Install App On Mobile Button -->
+            <button id="empInstallAppBtnHero" title="تثبيت تطبيق AE على الهاتف" class="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-cyan-600 via-blue-600 to-indigo-600 hover:opacity-95 text-white font-black text-xs sm:text-sm shadow-md shadow-blue-500/25 flex items-center gap-2 transition-all active:scale-95 border border-cyan-400/30 animate-pwa-glow">
+              <i class="fa-solid fa-cloud-arrow-down text-cyan-200"></i>
+              <span>تحميل التطبيق على الهاتف</span>
+            </button>
           </div>
 
+        </div>
+      </div>
+
+      <!-- PWA Mobile App Quick-Install Card (Prominent for Mobile & Desktop) -->
+      <div id="empMobileAppPromoBanner" class="glass-panel rounded-2xl p-4 shadow-lg bg-gradient-to-r from-slate-900/95 via-indigo-950/70 to-slate-900/95 border border-blue-500/30 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-3.5 w-full sm:w-auto">
+          <div class="w-12 h-12 rounded-2xl p-1 bg-gradient-to-tr from-cyan-400 via-blue-500 to-purple-600 shadow-lg shadow-blue-500/30 shrink-0 flex items-center justify-center">
+            <img src="icon.svg" alt="AE" class="w-full h-full object-contain rounded-xl">
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h3 class="text-sm font-black text-white">تطبيق AE (HR-SYSTEM) لهاتفك المحمول</h3>
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                <i class="fa-solid fa-bolt text-[9px]"></i> سريع ومباشر
+              </span>
+            </div>
+            <p class="text-xs text-slate-300 mt-0.5">ثبّت التطبيق الآن بضغطة زر لتسجيل بصمة الحضور (GPS) ومتابعة الرواتب مباشرة من شاشة هاتفك الرئيسية.</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 w-full sm:w-auto shrink-0">
+          <button id="empInstallAppBtnBanner" class="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 via-blue-600 to-purple-600 hover:from-cyan-400 hover:to-purple-500 text-white font-black text-xs sm:text-sm shadow-lg shadow-blue-500/30 flex items-center justify-center gap-2 transition-all active:scale-95 animate-pwa-glow">
+            <i class="fa-solid fa-mobile-screen-button text-base"></i>
+            <span>تثبيت التطبيق الآن</span>
+          </button>
         </div>
       </div>
 
@@ -3961,6 +3997,115 @@
     </div>
   </div>
 
+  <!-- ==================================================================== -->
+  <!-- 11. PWA MOBILE APP INSTALLATION MODAL (تثبيت التطبيق على الهاتف) -->
+  <!-- ==================================================================== -->
+  <div id="pwaInstallModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm modal-backdrop">
+    <div class="glass-panel rounded-3xl w-[95vw] sm:w-[90vw] max-w-lg max-h-[92vh] overflow-y-auto p-5 sm:p-7 mx-auto shadow-2xl modal-content-anim relative border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+      
+      <!-- Modal Close Button -->
+      <button type="button" id="closePwaInstallModalBtn" aria-label="إغلاق" class="absolute top-4 left-4 w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white flex items-center justify-center transition-colors">
+        <i class="fa-solid fa-xmark text-lg"></i>
+      </button>
+
+      <!-- App Brand Header with the NEW AE Icon -->
+      <div class="text-center pt-2 pb-5 border-b border-slate-200 dark:border-slate-800">
+        <div class="w-20 h-20 sm:w-24 sm:h-24 mx-auto mb-3.5 rounded-3xl p-1 bg-gradient-to-tr from-cyan-400 via-blue-600 to-purple-600 shadow-xl shadow-blue-500/25 flex items-center justify-center">
+          <img src="icon.svg" alt="AE (HR-SYSTEM)" class="w-full h-full object-contain rounded-[20px]">
+        </div>
+        <div class="flex items-center justify-center gap-1.5 font-mono mb-1">
+          <span class="text-xl sm:text-2xl font-black bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-600 bg-clip-text text-transparent">AE</span>
+          <span class="text-sm sm:text-base font-bold text-blue-600 dark:text-cyan-400">(HR-SYSTEM)</span>
+        </div>
+        <h3 class="text-base sm:text-lg font-black text-slate-900 dark:text-white">تثبيت التطبيق على هاتفك المحمول</h3>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-xs mx-auto">
+          احصل على الأيقونة الرسمية الجديدة على شاشة هاتفك لتسجيل الحضور الجغرافي والوصول السريع
+        </p>
+      </div>
+
+      <!-- Native Direct Install Container (Android Chrome / Edge) -->
+      <div id="pwaDirectInstallBox" class="py-5 space-y-3">
+        <div class="p-3.5 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 flex items-start gap-3">
+          <i class="fa-solid fa-circle-check text-emerald-500 text-lg mt-0.5 shrink-0"></i>
+          <div class="text-xs text-slate-700 dark:text-slate-300">
+            <span class="font-bold block text-slate-900 dark:text-white mb-0.5">جاهز للتثبيت بنقرة واحدة!</span>
+            سيتم إضافة تطبيق <strong>AE (HR-SYSTEM)</strong> بشعاره الجديد مباشرة إلى شاشة هاتفك الرئيسية كأي تطبيق عادي بدون الحاجة لفتح المتصفح.
+          </div>
+        </div>
+        <button id="pwaTriggerNativeInstallBtn" class="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-cyan-500 via-blue-600 to-purple-600 hover:from-cyan-400 hover:to-purple-500 text-white font-black text-sm sm:text-base shadow-xl shadow-blue-500/30 flex items-center justify-center gap-2.5 transition-all active:scale-95">
+          <i class="fa-solid fa-download text-lg"></i>
+          <span>تثبيت التطبيق الآن على الهاتف</span>
+        </button>
+      </div>
+
+      <!-- iOS (iPhone / Safari) Guide Section (Always visible or toggled for iPhone) -->
+      <div id="pwaIosGuideBox" class="py-4 border-t border-slate-200 dark:border-slate-800 space-y-3">
+        <div class="flex items-center gap-2 text-xs font-black text-slate-900 dark:text-white">
+          <i class="fa-brands fa-apple text-base text-slate-700 dark:text-slate-300"></i>
+          <span>خطوات التثبيت لمستخدمي هواتف آيفون (iPhone / iPad):</span>
+        </div>
+        <div class="space-y-2.5 text-xs text-slate-700 dark:text-slate-300">
+          <div class="flex items-start gap-2.5 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+            <span class="w-6 h-6 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center shrink-0 text-xs">1</span>
+            <div class="leading-relaxed">
+              اضغط على زر <strong>المشاركة (Share)</strong> 
+              <span class="inline-flex items-center justify-center px-2 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900/60 dark:text-blue-300 font-bold mx-1">
+                <i class="fa-solid fa-arrow-up-from-bracket mr-1"></i> مشاركة
+              </span>
+              في شريط Safari السفلي.
+            </div>
+          </div>
+          <div class="flex items-start gap-2.5 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+            <span class="w-6 h-6 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center shrink-0 text-xs">2</span>
+            <div class="leading-relaxed">
+              اسحب القائمة للأعلى قليلاً واختر:
+              <strong class="text-blue-600 dark:text-cyan-400 block mt-0.5">
+                <i class="fa-regular fa-square-plus text-emerald-500 ml-1"></i>
+                "إضافة إلى الصفحة الرئيسية" (Add to Home Screen)
+              </strong>
+            </div>
+          </div>
+          <div class="flex items-start gap-2.5 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+            <span class="w-6 h-6 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center shrink-0 text-xs">3</span>
+            <div class="leading-relaxed">
+              اضغط على كلمة <strong>"إضافة" (Add)</strong> في أعلى الزاوية. سيظهر التطبيق فوراً على شاشة هاتفك مع اللوجو الجديد!
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Android Fallback Guide (if browser menu is needed) -->
+      <div id="pwaAndroidMenuGuideBox" class="py-3 border-t border-slate-200 dark:border-slate-800 space-y-2">
+        <div class="flex items-center gap-2 text-xs font-black text-slate-900 dark:text-white">
+          <i class="fa-brands fa-android text-base text-emerald-500"></i>
+          <span>إذا لم يظهر التثبيت المباشر على الأندرويد:</span>
+        </div>
+        <p class="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+          اضغط على زر القائمة <i class="fa-solid fa-ellipsis-vertical px-1 text-slate-700 dark:text-slate-200"></i> (الثلاث نقاط) في متصفح Chrome، ثم اختر <strong>"تثبيت التطبيق" (Install App)</strong> أو <strong>"إضافة إلى الشاشة الرئيسية"</strong>.
+        </p>
+      </div>
+
+      <!-- App Installed Status (Shown when already installed) -->
+      <div id="pwaAlreadyInstalledBox" class="hidden py-4 text-center">
+        <div class="w-12 h-12 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto mb-2 text-2xl">
+          <i class="fa-solid fa-circle-check"></i>
+        </div>
+        <h4 class="text-sm font-black text-slate-900 dark:text-white">تطبيق AE مثبت بالفعل على هذا الجهاز!</h4>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+          يمكنك فتحه مباشرة من شاشة التطبيقات على هاتفك مع الشعار الجديد.
+        </p>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="pt-4 mt-2 border-t border-slate-200 dark:border-slate-800 flex justify-end">
+        <button type="button" id="pwaCloseModalFooterBtn" class="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs transition-colors">
+          تم، فهمت ذلك
+        </button>
+      </div>
+
+    </div>
+  </div>
+
   <div id="toastContainer" aria-live="polite" aria-atomic="true" class="fixed bottom-5 left-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
 
   <!-- Scripts -->
@@ -3968,19 +4113,140 @@
   <script src="api.js?v=geofix_1"></script>
   <script src="app.js?v=geofix_1"></script>
 
-  <!-- PWA Service Worker Registration -->
+  <!-- PWA Service Worker & Install Controller -->
   <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js')
-          .then((reg) => {
-            console.log('[PWA] Service Worker registered successfully with scope:', reg.scope);
-          })
-          .catch((err) => {
-            console.error('[PWA] Service Worker registration failed:', err);
-          });
+    (function() {
+      // 1. Register Service Worker with cache update
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('./sw.js')
+            .then((reg) => {
+              console.log('[PWA] Service Worker registered successfully with scope:', reg.scope);
+              // Trigger active check for new cache
+              reg.update();
+            })
+            .catch((err) => {
+              console.error('[PWA] Service Worker registration failed:', err);
+            });
+        });
+      }
+
+      // 2. Global PWA Install State & Event Listeners
+      let deferredPrompt = null;
+      const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+
+      const pwaModal = document.getElementById('pwaInstallModal');
+      const directInstallBox = document.getElementById('pwaDirectInstallBox');
+      const iosGuideBox = document.getElementById('pwaIosGuideBox');
+      const androidGuideBox = document.getElementById('pwaAndroidMenuGuideBox');
+      const alreadyInstalledBox = document.getElementById('pwaAlreadyInstalledBox');
+      const triggerNativeInstallBtn = document.getElementById('pwaTriggerNativeInstallBtn');
+
+      function updateUiForPlatform() {
+        if (isStandalone) {
+          if (alreadyInstalledBox) alreadyInstalledBox.classList.remove('hidden');
+          if (directInstallBox) directInstallBox.classList.add('hidden');
+          if (iosGuideBox) iosGuideBox.classList.add('hidden');
+          if (androidGuideBox) androidGuideBox.classList.add('hidden');
+          return;
+        }
+
+        if (isIos) {
+          if (iosGuideBox) iosGuideBox.classList.remove('hidden');
+          if (directInstallBox) directInstallBox.classList.add('hidden');
+          if (androidGuideBox) androidGuideBox.classList.add('hidden');
+        } else {
+          if (iosGuideBox) iosGuideBox.classList.add('hidden');
+          if (deferredPrompt) {
+            if (directInstallBox) directInstallBox.classList.remove('hidden');
+            if (androidGuideBox) androidGuideBox.classList.add('hidden');
+          } else {
+            if (directInstallBox) directInstallBox.classList.remove('hidden');
+            if (androidGuideBox) androidGuideBox.classList.remove('hidden');
+          }
+        }
+      }
+
+      window.addEventListener('beforeinstallprompt', (e) => {
+        // Prevent default mini-infobar
+        e.preventDefault();
+        deferredPrompt = e;
+        console.log('[PWA] beforeinstallprompt captured successfully.');
+        updateUiForPlatform();
       });
-    }
+
+      window.addEventListener('appinstalled', () => {
+        console.log('[PWA] Application successfully installed.');
+        deferredPrompt = null;
+        updateUiForPlatform();
+        if (typeof showToast === 'function') {
+          showToast('تهانينا! تم تثبيت تطبيق AE بنجاح على هاتفك.', 'success');
+        }
+      });
+
+      function openPwaModal() {
+        if (!pwaModal) return;
+        updateUiForPlatform();
+        pwaModal.classList.remove('hidden');
+      }
+
+      function closePwaModal() {
+        if (!pwaModal) return;
+        pwaModal.classList.add('hidden');
+      }
+
+      async function handleInstallClick() {
+        if (isStandalone) {
+          openPwaModal();
+          return;
+        }
+
+        if (deferredPrompt) {
+          try {
+            deferredPrompt.prompt();
+            const choiceResult = await deferredPrompt.userChoice;
+            console.log('[PWA] User choice:', choiceResult.outcome);
+            if (choiceResult.outcome === 'accepted') {
+              if (typeof showToast === 'function') {
+                showToast('جاري تثبيت تطبيق AE على الهاتف...', 'info');
+              }
+            }
+          } catch(err) {
+            console.error('[PWA] Error invoking prompt:', err);
+            openPwaModal();
+          }
+          deferredPrompt = null;
+          closePwaModal();
+        } else {
+          // If iOS or deferredPrompt not available, open informative modal
+          openPwaModal();
+        }
+      }
+
+      // Hook all Install buttons across Employee Portal
+      const empInstallBtnHero = document.getElementById('empInstallAppBtnHero');
+      const empInstallBtnHeader = document.getElementById('empInstallAppBtnHeader');
+      const empInstallBtnBanner = document.getElementById('empInstallAppBtnBanner');
+      const closeBtn = document.getElementById('closePwaInstallModalBtn');
+      const closeFooterBtn = document.getElementById('pwaCloseModalFooterBtn');
+
+      if (empInstallBtnHero) empInstallBtnHero.addEventListener('click', handleInstallClick);
+      if (empInstallBtnHeader) empInstallBtnHeader.addEventListener('click', handleInstallClick);
+      if (empInstallBtnBanner) empInstallBtnBanner.addEventListener('click', handleInstallClick);
+      if (triggerNativeInstallBtn) triggerNativeInstallBtn.addEventListener('click', handleInstallClick);
+
+      if (closeBtn) closeBtn.addEventListener('click', closePwaModal);
+      if (closeFooterBtn) closeFooterBtn.addEventListener('click', closePwaModal);
+      if (pwaModal) {
+        pwaModal.addEventListener('click', (e) => {
+          if (e.target === pwaModal) closePwaModal();
+        });
+      }
+
+      // Initial platform UI setup
+      updateUiForPlatform();
+    })();
   </script>
 </body>
 </html>

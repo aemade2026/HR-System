@@ -815,5 +815,20 @@ html.dark .auth-glass-card {
   overflow: hidden;
 }
 
+/* PWA Install Button Subtle Pulse */
+@keyframes pwa-glow {
+  0%, 100% {
+    box-shadow: 0 4px 14px 0 rgba(37, 99, 235, 0.35);
+  }
+  50% {
+    box-shadow: 0 6px 24px 0 rgba(56, 189, 248, 0.6);
+  }
+}
+
+.animate-pwa-glow {
+  animation: pwa-glow 3s ease-in-out infinite;
+}
+
+
 
 
