@@ -89,7 +89,7 @@
         <div class="w-10 h-10 rounded-xl p-0.5 bg-gradient-to-tr from-cyan-400 via-blue-600 to-indigo-600 shadow-md shadow-blue-500/20 flex items-center justify-center shrink-0">
           <img src="icon.svg" alt="AE" class="w-full h-full object-contain rounded-[10px]">
         </div>
-        <div class="flex items-center gap-1.5">
+        <div class="hidden sm:flex items-center gap-1.5">
           <span class="font-black text-slate-900 dark:text-white text-base tracking-tight font-mono bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 dark:from-cyan-400 dark:via-blue-300 dark:to-purple-400 bg-clip-text text-transparent">AE</span>
           <span class="text-xs font-black text-blue-600 dark:text-cyan-400 font-mono tracking-tight bg-blue-50 dark:bg-slate-800/80 px-2 py-0.5 rounded-md border border-blue-200 dark:border-cyan-500/30">(HR-SYSTEM)</span>
         </div>
@@ -259,11 +259,11 @@
       <div class="max-w-7xl mx-auto flex items-center justify-between gap-3">
         
         <!-- Brand & Portal Name -->
-        <div class="flex items-center gap-3">
+        <div class="flex items-center gap-2 sm:gap-3">
           <div class="w-10 h-10 rounded-xl p-0.5 bg-gradient-to-tr from-cyan-400 via-blue-600 to-indigo-600 shadow-md shadow-blue-500/20 flex items-center justify-center shrink-0">
             <img src="icon.svg" alt="AE" class="w-full h-full object-contain rounded-[10px]">
           </div>
-          <div>
+          <div class="hidden sm:block">
             <div class="flex items-center gap-2">
               <span class="text-base sm:text-lg font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-1.5">
                 <span class="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 dark:from-cyan-400 dark:via-blue-300 dark:to-purple-400 bg-clip-text text-transparent font-mono">AE</span>
@@ -279,13 +279,13 @@
         </div>
 
         <!-- Role Switching & User Controls -->
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-1.5 sm:gap-2">
           
           <!-- ADMIN SWITCH BUTTON (Visible only if user role is 'admin' or 'hr') -->
           <div id="empRoleSwitchContainer" class="hidden">
-            <button id="switchToAdminBtn" class="px-3.5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-black text-xs sm:text-sm shadow-md shadow-blue-500/20 flex items-center gap-2 transition-all active:scale-95">
-              <i class="fa-solid fa-crown text-amber-300"></i>
-              <span>لوحة تحكم الإدارة (Admin Dashboard)</span>
+            <button id="switchToAdminBtn" title="لوحة تحكم الإدارة" class="px-2.5 sm:px-3.5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-black text-xs sm:text-sm shadow-md shadow-blue-500/20 flex items-center gap-1.5 sm:gap-2 transition-all active:scale-95">
+              <i class="fa-solid fa-crown text-amber-300 text-xs sm:text-sm"></i>
+              <span class="hidden md:inline">لوحة تحكم الإدارة</span>
             </button>
           </div>
 
@@ -711,7 +711,7 @@
           <div class="w-10 h-10 sm:w-11 sm:h-11 rounded-xl p-0.5 bg-gradient-to-tr from-cyan-400 via-blue-600 to-indigo-600 shadow-lg shadow-blue-500/20 flex items-center justify-center shrink-0">
             <img src="icon.svg" alt="AE" class="w-full h-full object-contain rounded-[10px]">
           </div>
-          <div>
+          <div class="hidden sm:block">
             <div class="flex items-center gap-2">
               <span class="text-base sm:text-lg lg:text-xl font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-1.5">
                 <span class="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 dark:from-cyan-400 dark:via-blue-300 dark:to-purple-400 bg-clip-text text-transparent font-mono">AE</span>
@@ -781,18 +781,17 @@
             <i class="fa-solid fa-moon text-sm" aria-hidden="true"></i>
           </button>
 
-          <!-- Kiosk Fullscreen Toggle -->
-          <button id="toggleFullscreenBtn" aria-label="شاشة كاملة لكشك البصمة" title="شاشة كاملة لكشك البصمة" class="w-9 h-9 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 flex items-center justify-center transition-colors">
+          <!-- Kiosk Fullscreen Toggle (Hidden on small mobile screens to save space) -->
+          <button id="toggleFullscreenBtn" aria-label="شاشة كاملة لكشك البصمة" title="شاشة كاملة لكشك البصمة" class="hidden sm:flex w-9 h-9 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 items-center justify-center transition-colors">
             <i class="fa-solid fa-expand text-sm" aria-hidden="true"></i>
           </button>
-
 
           <div class="w-px h-6 bg-slate-300 dark:bg-slate-700 mx-1 hidden sm:block"></div>
 
           <!-- Switch to Employee Portal Button -->
-          <button id="switchToEmployeeBtn" class="px-3 py-1.5 rounded-xl border border-blue-300 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-bold text-xs hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-all flex items-center gap-1.5 shadow-sm" title="العودة لبوابتي الشخصية كموظف">
+          <button id="switchToEmployeeBtn" class="px-2.5 sm:px-3 py-1.5 rounded-xl border border-blue-300 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-bold text-xs hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-all flex items-center gap-1.5 shadow-sm" title="العودة لبوابتي الشخصية كموظف">
             <i class="fa-solid fa-user text-xs"></i>
-            <span class="hidden sm:inline">بوابتي الشخصية</span>
+            <span class="hidden md:inline">بوابتي الشخصية</span>
           </button>
 
           <!-- Admin Logout Button -->
