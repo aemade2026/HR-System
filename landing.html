@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl" class="dark">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>نظام AE (HR-SYSTEM) للموارد البشرية والرواتب | تسجيل الشركات والمشتركين الجدد (SaaS)</title>
   
   <!-- Progressive Web App (PWA) Meta & Manifest -->
@@ -51,8 +51,27 @@
   </script>
 
   <style>
+    html, body {
+      overflow-x: hidden;
+      max-width: 100vw;
+      width: 100%;
+    }
+    * {
+      box-sizing: border-box;
+    }
     body {
       font-family: 'Cairo', sans-serif;
+    }
+    .ambient-glow {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      overflow: hidden;
+      background: 
+        radial-gradient(circle 350px at 75% -10%, rgba(139, 92, 246, 0.25), transparent 70%),
+        radial-gradient(circle 280px at 15% 40%, rgba(59, 130, 246, 0.18), transparent 70%),
+        radial-gradient(circle 300px at 80% 90%, rgba(16, 185, 129, 0.14), transparent 70%);
     }
     .glass-card {
       background: rgba(15, 23, 42, 0.75);
@@ -74,38 +93,36 @@
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col selection:bg-purple-600 selection:text-white bg-grid-pattern relative overflow-x-hidden">
 
-  <!-- Ambient Background Lighting Glows -->
-  <div class="absolute -top-40 right-1/4 w-96 h-96 bg-purple-600/20 rounded-full blur-3xl pointer-events-none"></div>
-  <div class="absolute top-1/3 -left-20 w-80 h-80 bg-blue-600/15 rounded-full blur-3xl pointer-events-none"></div>
-  <div class="absolute -bottom-20 right-10 w-96 h-96 bg-emerald-600/10 rounded-full blur-3xl pointer-events-none"></div>
+  <!-- Ambient Background Lighting Glows (Contained to prevent any horizontal overflow) -->
+  <div class="ambient-glow" aria-hidden="true"></div>
 
   <!-- Top Navigation Header -->
   <header class="border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md sticky top-0 z-50">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+    <div class="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 sm:h-20 flex items-center justify-between">
       
       <!-- Brand Logo -->
-      <a href="landing.html" class="flex items-center gap-3.5 group">
-        <div class="w-12 h-12 rounded-2xl p-0.5 bg-gradient-to-tr from-cyan-400 via-blue-600 to-purple-600 shadow-xl shadow-purple-500/25 flex items-center justify-center transition-all duration-300 group-hover:scale-105 group-hover:shadow-cyan-500/30">
-          <img src="icon.svg" alt="AE HR-SYSTEM Logo" class="w-full h-full object-contain rounded-[14px]">
+      <a href="landing.html" class="flex items-center gap-2 sm:gap-3.5 group">
+        <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl p-0.5 bg-gradient-to-tr from-cyan-400 via-blue-600 to-purple-600 shadow-lg shadow-purple-500/25 flex items-center justify-center shrink-0 transition-all duration-300 group-hover:scale-105 group-hover:shadow-cyan-500/30">
+          <img src="icon.svg" alt="AE HR-SYSTEM Logo" class="w-full h-full object-contain rounded-[10px] sm:rounded-[14px]">
         </div>
-        <div>
-          <div class="flex items-center gap-2">
-            <span class="text-xl sm:text-2xl font-black tracking-tight flex items-center gap-1.5">
-              <span class="bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 bg-clip-text text-transparent font-black font-mono tracking-wider">AE</span>
-              <span class="text-xs sm:text-sm font-black text-cyan-300 font-mono tracking-tight bg-slate-900/90 px-2 py-0.5 rounded-lg border border-cyan-500/30">(HR-SYSTEM)</span>
+        <div class="flex flex-col">
+          <div class="flex items-center gap-1.5 sm:gap-2">
+            <span class="font-black tracking-tight flex items-center gap-1 font-mono" dir="ltr">
+              <span class="bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 bg-clip-text text-transparent font-black text-lg sm:text-2xl">AE</span>
+              <span class="text-[10px] sm:text-xs font-black text-cyan-300 tracking-tight bg-slate-900/90 px-1.5 py-0.5 rounded-lg border border-cyan-500/30 whitespace-nowrap">(HR-SYSTEM)</span>
             </span>
-            <span class="text-[10px] px-2 py-0.5 rounded-full bg-purple-950/80 text-purple-300 border border-purple-700/60 font-mono font-extrabold uppercase tracking-wide">Cloud SaaS</span>
+            <span class="hidden sm:inline-block text-[10px] px-2 py-0.5 rounded-full bg-purple-950/80 text-purple-300 border border-purple-700/60 font-mono font-extrabold uppercase tracking-wide">Cloud SaaS</span>
           </div>
-          <p class="text-[11px] text-slate-400 font-semibold tracking-wide">منظومة الموارد البشرية وإدارة الرواتب الذكية</p>
+          <p class="hidden md:block text-[11px] text-slate-400 font-semibold tracking-wide">منظومة الموارد البشرية وإدارة الرواتب الذكية</p>
         </div>
       </a>
 
       <!-- Quick Actions -->
-      <div class="flex items-center gap-3">
-        <a href="#registerSection" class="hidden sm:inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-800/60 transition-colors">
+      <div class="flex items-center gap-2 sm:gap-3 shrink-0">
+        <a href="#registerSection" class="hidden md:inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-800/60 transition-colors">
           <span>المميزات والاشتراك</span>
         </a>
-        <a href="index.html" class="px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs sm:text-sm shadow-md shadow-purple-500/20 flex items-center gap-2 transition-all active:scale-95">
+        <a href="index.html" class="px-3.5 py-2 sm:px-5 sm:py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs sm:text-sm shadow-md shadow-purple-500/20 flex items-center gap-1.5 sm:gap-2 transition-all active:scale-95 shrink-0">
           <i class="fa-solid fa-right-to-bracket text-xs"></i>
           <span>دخول النظام</span>
         </a>
@@ -114,39 +131,41 @@
   </header>
 
   <!-- Main Hero & Registration Container -->
-  <main class="flex-1 flex flex-col justify-center py-12 sm:py-16 px-4 sm:px-6 lg:px-8 relative z-10">
-    <div class="max-w-5xl mx-auto w-full space-y-12">
+  <main class="flex-1 flex flex-col justify-center py-8 sm:py-16 px-3 sm:px-6 lg:px-8 relative z-10 w-full max-w-full">
+    <div class="max-w-5xl mx-auto w-full space-y-8 sm:space-y-12">
 
       <!-- Hero Header -->
-      <div class="text-center space-y-4 max-w-3xl mx-auto">
-        <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold bg-purple-950/80 text-purple-300 border border-purple-800/60 shadow-inner">
-          <span class="w-2 h-2 rounded-full bg-purple-400 animate-ping"></span>
-          <span>منظومة متكاملة متعددة المنشآت (Multi-Tenant Cloud HR)</span>
+      <div class="text-center space-y-3 sm:space-y-4 max-w-3xl mx-auto px-2">
+        <div class="inline-flex items-center gap-2 px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-bold bg-purple-950/80 text-purple-300 border border-purple-800/60 shadow-inner max-w-full">
+          <span class="w-2 h-2 rounded-full bg-purple-400 animate-ping shrink-0"></span>
+          <span class="truncate sm:whitespace-normal">منظومة متكاملة متعددة المنشآت (Multi-Tenant Cloud HR)</span>
         </div>
-        <h1 class="text-3xl sm:text-5xl font-black text-white leading-tight">
-          انضم إلى منظومة <span class="bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 bg-clip-text text-transparent font-mono">AE (HR-SYSTEM)</span> لإدارة الموارد البشرية
+        <h1 class="text-2xl sm:text-4xl lg:text-5xl font-black text-white leading-tight">
+          <span class="block text-slate-200 text-base sm:text-2xl font-bold mb-1">انضم إلى منظومة</span>
+          <span class="inline-block my-1 bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 bg-clip-text text-transparent font-mono tracking-wide text-2xl sm:text-4xl lg:text-5xl" dir="ltr">AE (HR-SYSTEM)</span>
+          <span class="block text-slate-100 text-lg sm:text-3xl font-black mt-1">لإدارة الموارد البشرية والرواتب</span>
         </h1>
-        <p class="text-sm sm:text-base text-slate-300 leading-relaxed max-w-2xl mx-auto">
+        <p class="text-xs sm:text-base text-slate-300 leading-relaxed max-w-2xl mx-auto">
           سجّل شركتك الآن للتمتع بنظام سحابي ذكي للبصمة البيومترية، الحضور الجغرافي (GPS)، وإدارة مسيرات الرواتب المتوافقة مع أنظمة العمل.
         </p>
       </div>
 
       <!-- Registration Form & Success State Card -->
-      <div id="registerSection" class="glass-card rounded-3xl p-6 sm:p-10 glow-purple max-w-2xl mx-auto border border-purple-500/30">
+      <div id="registerSection" class="glass-card rounded-2xl sm:rounded-3xl p-4 sm:p-8 md:p-10 glow-purple max-w-2xl mx-auto border border-purple-500/30 w-full">
         
         <!-- ============================================================ -->
         <!-- 1. FORM STATE: Company Registration Form -->
         <!-- ============================================================ -->
-        <form id="companyRegistrationForm" class="space-y-6">
-          <div class="border-b border-slate-800 pb-4 flex items-center justify-between">
+        <form id="companyRegistrationForm" class="space-y-5 sm:space-y-6">
+          <div class="border-b border-slate-800 pb-4 flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h2 class="text-lg sm:text-xl font-black text-white flex items-center gap-2">
-                <i class="fa-solid fa-building-circle-check text-purple-400"></i>
+              <h2 class="text-base sm:text-xl font-black text-white flex items-center gap-2">
+                <i class="fa-solid fa-building-circle-check text-purple-400 text-sm sm:text-base"></i>
                 <span>طلب تسجيل منشأة جديدة</span>
               </h2>
-              <p class="text-xs text-slate-400 mt-1">أدخل بيانات الشركة وحساب المدير المعتمد للبدء</p>
+              <p class="text-[11px] sm:text-xs text-slate-400 mt-1">أدخل بيانات الشركة وحساب المدير المعتمد للبدء</p>
             </div>
-            <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-purple-900/40 text-purple-300 border border-purple-700/40">خطوة واحدة فقط</span>
+            <span class="px-2.5 py-1 rounded-full text-[10px] sm:text-[11px] font-bold bg-purple-900/40 text-purple-300 border border-purple-700/40 shrink-0">خطوة واحدة فقط</span>
           </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -303,13 +322,13 @@
   </main>
 
   <!-- Footer -->
-  <footer class="border-t border-slate-800/80 bg-slate-950/90 py-6 text-center text-xs text-slate-500">
-    <div class="max-w-7xl mx-auto px-4 flex flex-wrap items-center justify-between gap-4">
-      <div class="flex items-center gap-2">
+  <footer class="border-t border-slate-800/80 bg-slate-950/90 py-6 text-center text-xs text-slate-500 w-full overflow-hidden">
+    <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-right">
+      <div class="flex items-center justify-center gap-2">
         <img src="icon.svg" alt="AE" class="w-5 h-5 rounded">
-        <span>منظومة AE (HR-SYSTEM) لإدارة الموارد البشرية والرواتب &copy; 2026. كافة الحقوق محفوظة.</span>
+        <span>منظومة <span dir="ltr" class="inline-block font-mono font-bold">AE (HR-SYSTEM)</span> لإدارة الموارد البشرية والرواتب &copy; 2026. كافة الحقوق محفوظة.</span>
       </div>
-      <div class="flex items-center gap-2">
+      <div class="flex items-center justify-center gap-2">
         <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
         <span class="text-slate-400 font-mono">Cloud Multi-Tenant SaaS v2.4</span>
       </div>
