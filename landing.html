@@ -168,6 +168,12 @@
             <span class="px-2.5 py-1 rounded-full text-[10px] sm:text-[11px] font-bold bg-purple-900/40 text-purple-300 border border-purple-700/40 shrink-0">خطوة واحدة فقط</span>
           </div>
 
+          <!-- Inline Error Banner -->
+          <div id="regErrorBanner" class="hidden p-3 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-300 text-xs font-bold flex items-center gap-2.5">
+            <i class="fa-solid fa-triangle-exclamation text-rose-400 text-sm shrink-0"></i>
+            <span id="regErrorText"></span>
+          </div>
+
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             
             <!-- Company Name -->
@@ -188,7 +194,7 @@
               </label>
               <div class="relative">
                 <i class="fa-solid fa-file-invoice absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
-                <input type="text" id="taxNumber" placeholder="مثال: 492-710-853" class="w-full pr-10 pl-3.5 py-2.5 rounded-xl text-xs sm:text-sm bg-slate-900/90 text-white border border-slate-700 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/30 transition-all font-mono font-medium placeholder:text-slate-500">
+                <input type="text" id="taxNumber" placeholder="مثال: 123-456-789" class="w-full pr-10 pl-3.5 py-2.5 rounded-xl text-xs sm:text-sm bg-slate-900/90 text-white border border-slate-700 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/30 transition-all font-mono font-medium placeholder:text-slate-500">
               </div>
             </div>
 
@@ -344,8 +350,26 @@
       const regForm = document.getElementById('companyRegistrationForm');
       if (!regForm) return;
 
+      const errorBanner = document.getElementById('regErrorBanner');
+      const errorText = document.getElementById('regErrorText');
+
+      function showError(msg) {
+        if (errorBanner && errorText) {
+          errorText.textContent = msg;
+          errorBanner.classList.remove('hidden');
+          errorBanner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        } else {
+          alert(msg);
+        }
+      }
+
+      function clearError() {
+        if (errorBanner) errorBanner.classList.add('hidden');
+      }
+
       regForm.addEventListener('submit', async (e) => {
         e.preventDefault();
+        clearError();
 
         const companyName = document.getElementById('companyName').value.trim();
         const taxNumber = document.getElementById('taxNumber').value.trim();
@@ -372,23 +396,24 @@
               pin: pin
           });
 
-          if(res.success) {
-              document.getElementById('companyRegistrationForm').classList.add('hidden');
-              document.getElementById('successMessage').classList.remove('hidden');
-          } else {
-              alert(res.message || 'حدث خطأ أثناء تسجيل الشركة');
-              if (submitBtn) {
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = origBtnText;
-              }
-          }
-        } catch (err) {
-          console.error(err);
-          alert('حدث خطأ غير متوقع: ' + (err.message || err));
           if (submitBtn) {
             submitBtn.disabled = false;
             submitBtn.innerHTML = origBtnText;
           }
+
+          if (res.success) {
+            document.getElementById('companyRegistrationForm').classList.add('hidden');
+            document.getElementById('successMessage').classList.remove('hidden');
+          } else {
+            showError(res.message || 'حدث خطأ أثناء تسجيل الشركة');
+          }
+        } catch (err) {
+          console.error(err);
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = origBtnText;
+          }
+          showError('حدث خطأ غير متوقع: ' + (err.message || err));
         }
       });
     });

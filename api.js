@@ -2295,7 +2295,12 @@ class ApiService {
       }
 
       const email = String(tenantData.email || '').trim().toLowerCase();
+      const taxNumber = String(tenantData.taxNumber || '').trim();
+      const companyName = String(tenantData.companyName || '').trim();
+      const managerName = String(tenantData.managerName || '').trim();
+      const phone = String(tenantData.phone || '').trim();
       const pin = String(tenantData.pin || '').trim();
+
       if (!pin || pin.length < 4) {
         return this.#createEnvelope(false, null, 'يرجى إدخال رمز PIN للمدير لا يقل عن 4 أرقام', {
           message: 'يرجى إدخال رمز PIN للمدير لا يقل عن 4 أرقام'
@@ -2305,67 +2310,107 @@ class ApiService {
       const db = LocalDatabase.getDB();
       if (!Array.isArray(db.companies)) db.companies = cloneData(INITIAL_DATABASE.companies || []);
 
-      // فحص عدم تكرار البريد الإلكتروني أو الرقم الضريبي
-      const duplicate = db.companies.find(c => 
-        (c.email && c.email.toLowerCase() === email) || 
-        (tenantData.taxNumber && c.taxNumber && c.taxNumber === tenantData.taxNumber)
-      );
-      if (duplicate) {
-        return this.#createEnvelope(false, null, 'البريد الإلكتروني أو الرقم الضريبي مسجل بالفعل لشركة أخرى بالنظام', {
-          message: 'البريد الإلكتروني أو الرقم الضريبي مسجل بالفعل لشركة أخرى بالنظام'
+      // 1. فحص عدم تكرار البريد الإلكتروني مع الشركات المفعلة فقط
+      if (supabase && email) {
+        try {
+          const { data: existingActive } = await supabase
+            .from('companies')
+            .select('id, name, status, manager_email')
+            .eq('manager_email', email)
+            .eq('status', 'active')
+            .limit(1);
+
+          if (existingActive && existingActive.length > 0) {
+            return this.#createEnvelope(false, null, `البريد الإلكتروني (${email}) مسجل بالفعل لشركة نشطة أخرى (${existingActive[0].name}). يرجى استخدام بريد إلكتروني مختلف أو تسجيل الدخول.`, {
+              message: `البريد الإلكتروني (${email}) مسجل بالفعل لشركة نشطة أخرى (${existingActive[0].name}). يرجى استخدام بريد إلكتروني مختلف أو تسجيل الدخول.`
+            });
+          }
+        } catch (sbErr) {
+          console.warn('[Supabase Duplicate Check Fallback]:', sbErr);
+        }
+      }
+
+      // فحص محلي مع استثناء الشركة الجذرية التجريبية الافتراضية
+      const duplicateActive = db.companies.find(c => {
+        if (c.id === '11111111-2222-3333-4444-555555555555') return false; // استثناء الشركة الافتراضية
+        if (c.status === 'pending') return false; // السماح بتحديث أو إعادة إرسال الطلبات المعلقة
+        const isEmailMatch = email && c.email && c.email.toLowerCase() === email;
+        const isTaxMatch = taxNumber && c.taxNumber && c.taxNumber === taxNumber;
+        return isEmailMatch || isTaxMatch;
+      });
+
+      if (duplicateActive) {
+        return this.#createEnvelope(false, null, 'البريد الإلكتروني أو الرقم الضريبي مسجل بالفعل لشركة نشطة أخرى بالنظام', {
+          message: 'البريد الإلكتروني أو الرقم الضريبي مسجل بالفعل لشركة نشطة أخرى بالنظام'
         });
       }
 
+      // البحث عن أي طلب معلق سابق بنفس البريد أو الشركة لتحديثه
+      let existingPending = db.companies.find(c => 
+        c.status === 'pending' && (
+          (email && c.email && c.email.toLowerCase() === email) ||
+          (c.companyName && c.companyName.toLowerCase() === companyName.toLowerCase())
+        )
+      );
+
       // توليد معرف UUID فريد للشركة
-      const companyId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+      const companyId = existingPending?.id || ((typeof crypto !== 'undefined' && crypto.randomUUID)
         ? crypto.randomUUID()
-        : 'comp-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9);
+        : 'comp-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9));
 
       const newTenant = {
         id: companyId,
         company_id: companyId,
-        name: tenantData.companyName.trim(),
-        company_name: tenantData.companyName.trim(),
-        companyName: tenantData.companyName.trim(),
-        tax_number: (tenantData.taxNumber || '').trim(),
-        taxNumber: (tenantData.taxNumber || '').trim(),
-        manager_name: tenantData.managerName.trim(),
-        managerName: tenantData.managerName.trim(),
-        phone: (tenantData.phone || '').trim(),
+        name: companyName,
+        company_name: companyName,
+        companyName: companyName,
+        tax_number: taxNumber,
+        taxNumber: taxNumber,
+        manager_name: managerName,
+        managerName: managerName,
+        phone: phone,
         email: email,
         pin: pin,
         status: 'pending',
-        created_at: new Date().toISOString(),
-        createdAt: new Date().toISOString().split('T')[0]
+        created_at: existingPending?.created_at || new Date().toISOString(),
+        createdAt: existingPending?.createdAt || new Date().toISOString().split('T')[0]
       };
 
-      // 1. الإدراج في جدول companies في Supabase
+      // 2. الإدراج أو التحديث المباشر في Supabase مع مطابقة أسماء الأعمدة 100%
       if (supabase) {
         try {
           const sbPayload = {
             id: companyId,
-            name: newTenant.companyName,
-            tax_number: newTenant.taxNumber || null,
-            manager_name: newTenant.managerName,
-            phone: newTenant.phone || null,
-            email: newTenant.email || null,
-            pin: newTenant.pin,
-            status: 'pending'
+            name: companyName,
+            tax_number: taxNumber || null,
+            manager_name: managerName,
+            manager_phone: phone || null,
+            manager_email: email || null,
+            manager_pin: pin,
+            status: 'pending',
+            subscription_plan: 'basic',
+            is_active: true
           };
-          const { error } = await supabase.from('companies').insert([sbPayload]);
-          if (error) {
-            console.warn('[Supabase registerNewTenant Warning]:', error.message || error);
+          const { error: sbErr } = await supabase.from('companies').upsert([sbPayload], { onConflict: 'id' });
+          if (sbErr) {
+            console.error('[Supabase registerNewTenant Upsert Error]:', sbErr.message || sbErr);
+          } else {
+            console.log('[Supabase registerNewTenant Success]:', companyId, companyName);
           }
         } catch (sbErr) {
           console.warn('[Supabase registerNewTenant Fallback]:', sbErr);
         }
       }
 
-      // 2. الحفظ في LocalDatabase.companies كآلية Fallback مضمونة
-      db.companies.unshift(newTenant);
+      // 3. الحفظ في LocalDatabase.companies
+      if (existingPending) {
+        Object.assign(existingPending, newTenant);
+      } else {
+        db.companies.unshift(newTenant);
+      }
       LocalDatabase.saveDB(db);
 
-      // تسجيل الحدث في سجل الرقابة والتدقيق (Audit Log)
+      // 4. تسجيل الحدث في سجل الرقابة والتدقيق (Audit Log)
       AuditMiddleware.log({
         action: 'REGISTER_TENANT',
         actionType: 'إضافة',
@@ -2376,7 +2421,7 @@ class ApiService {
       });
 
       return this.#createEnvelope(true, cloneData(newTenant), null, {
-        message: 'تم استلام طلب تسجيل شركتكم بنجاح! طلبكم قيد المراجعة والاعتماد من قبل الإدارة وسيتم تفعيل حسابكم فوراً.'
+        message: 'تم استلام طلب تسجيل شركتكم بنجاح! طلبكم قيد المراجعة والاعتماد الفوري من قبل الإدارة وسيتم تفعيل حسابكم فوراً.'
       });
     } catch (err) {
       return this.#handleError(err, 'فشل في تسجيل الشركة الجديدة');
@@ -2408,11 +2453,11 @@ class ApiService {
               name: d.name || d.company_name || d.companyName || 'شركة بدون اسم',
               taxNumber: d.tax_number ?? d.taxNumber ?? 'غير مسجل',
               tax_number: d.tax_number ?? d.taxNumber ?? 'غير مسجل',
-              managerName: d.manager_name ?? d.managerName ?? 'غير مسجل',
-              manager_name: d.manager_name ?? d.managerName ?? 'غير مسجل',
-              phone: d.phone || '',
-              email: d.email || '',
-              pin: d.pin || '',
+              managerName: d.manager_name || d.managerName || 'غير مسجل',
+              manager_name: d.manager_name || d.managerName || 'غير مسجل',
+              phone: d.manager_phone || d.phone || '',
+              email: d.manager_email || d.email || '',
+              pin: d.manager_pin || d.pin || '',
               status: d.status || 'active',
               createdAt: d.created_at || d.createdAt || new Date().toISOString()
             }));
@@ -2438,6 +2483,9 @@ class ApiService {
             tenants.push(localC);
           }
         });
+        // تحديث قاعدة البيانات المحلية بالشركات الأحدث من Supabase
+        db.companies = cloneData(tenants);
+        LocalDatabase.saveDB(db);
       }
 
       // فرز القائمة بحيث تظهر الشركات المعلقة أولاً ثم حسب التاريخ
@@ -2476,9 +2524,9 @@ class ApiService {
               companyName: data.name || data.company_name,
               taxNumber: data.tax_number,
               managerName: data.manager_name,
-              phone: data.phone,
-              email: data.email,
-              pin: data.pin,
+              phone: data.manager_phone || data.phone || '',
+              email: data.manager_email || data.email || '',
+              pin: data.manager_pin || data.pin || '',
               status: 'pending'
             };
             db.companies.push(company);
@@ -2493,7 +2541,7 @@ class ApiService {
       // 1. تحديث حالة الشركة إلى active في Supabase
       if (supabase) {
         try {
-          await supabase.from('companies').update({ status: 'active' }).eq('id', companyId);
+          await supabase.from('companies').update({ status: 'active', is_active: true }).eq('id', companyId);
         } catch (sbErr) {
           console.warn('[Supabase approveTenant status error]:', sbErr);
         }
@@ -2504,9 +2552,9 @@ class ApiService {
 
       // 3. إنشاء موظف جديد ليكون مدير هذه الشركة (role = 'admin')
       const managerName = company.managerName || company.manager_name || 'مدير الشركة';
-      const managerEmail = company.email || `admin@comp-${companyId.slice(0, 6)}.com`;
-      const managerPhone = company.phone || '';
-      const managerPin = String(company.pin || '123456').trim();
+      const managerEmail = company.email || company.manager_email || `admin@comp-${companyId.slice(0, 6)}.com`;
+      const managerPhone = company.phone || company.manager_phone || '';
+      const managerPin = String(company.pin || company.manager_pin || '123456').trim();
 
       const managerId = await this.getNextEmployeeId();
       const managerEmp = this.#normalizeEmployee({
