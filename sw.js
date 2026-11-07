@@ -1,5 +1,5 @@
 // AE (HR-SYSTEM) - Service Worker (PWA)
-const CACHE_NAME = 'ae-hr-system-v2';
+const CACHE_NAME = 'ae-hr-system-v3';
 
 const ASSETS_TO_CACHE = [
   './',

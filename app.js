@@ -2594,6 +2594,102 @@
       resetAuthPin();
     });
 
+    /**
+     * استدعاء واجهة بصمة الجهاز الأصلية (Android BiometricPrompt / iOS FaceID/TouchID / Windows Hello)
+     * تفعيل مستشعر البصمة المدمج بالهاتف مباشرة ومنع ظهور رسالة "No passkeys available"
+     */
+    const requestDeviceBiometricVerification = async (empId, empName) => {
+      if (!window.PublicKeyCredential || !navigator.credentials) {
+        throw new Error('NOT_SUPPORTED');
+      }
+
+      let isBioSupported = false;
+      if (typeof PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable === 'function') {
+        try {
+          isBioSupported = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+        } catch (e) {
+          isBioSupported = false;
+        }
+      }
+
+      if (!isBioSupported) {
+        throw new Error('NO_PLATFORM_AUTHENTICATOR');
+      }
+
+      const challenge = new Uint8Array(32);
+      if (window.crypto && window.crypto.getRandomValues) {
+        window.crypto.getRandomValues(challenge);
+      }
+
+      const storageKey = 'AE_DEVICE_PASSKEY_' + (empId || 'default');
+      const savedKey = localStorage.getItem(storageKey);
+
+      // 1. إذا كان الموظف قد سجّل بصمة على هذا الجهاز مسبقاً، نطلب التحقق منها
+      if (savedKey) {
+        try {
+          const credIdBytes = Uint8Array.from(atob(savedKey), c => c.charCodeAt(0));
+          const getOptions = {
+            publicKey: {
+              challenge: challenge,
+              timeout: 60000,
+              userVerification: 'required',
+              allowCredentials: [{
+                id: credIdBytes,
+                type: 'public-key',
+                transports: ['internal']
+              }]
+            }
+          };
+
+          const assertion = await navigator.credentials.get(getOptions);
+          if (assertion) {
+            return { success: true, credential: assertion };
+          }
+        } catch (getErr) {
+          console.warn('[Device Biometrics] get() failed or key cleared, falling back to create():', getErr);
+        }
+      }
+
+      // 2. تفعيل مستشعر بصمة الهاتف الأصلي (BiometricPrompt) مباشرة عبر create() مع platform authenticator
+      // هذا الاستدعاء يُجبر الهاتف على فتح شاشة مسح البصمة مباشرة دون البحث عن أجهزة أخرى
+      const cleanId = String(empId || 'emp_user').replace(/[^\w-]/g, '_');
+      const cleanName = (empName || 'موظف').toString().replace(/[^\w\s-]/g, '').trim() || cleanId;
+
+      const createOptions = {
+        publicKey: {
+          challenge: challenge,
+          rp: {
+            name: "AE (HR-SYSTEM)"
+          },
+          user: {
+            id: new TextEncoder().encode(cleanId),
+            name: cleanId + '@ae-hr.local',
+            displayName: cleanName
+          },
+          pubKeyCredParams: [
+            { type: "public-key", alg: -7 },   // ES256 (Android, iOS)
+            { type: "public-key", alg: -257 }  // RS256 (Windows Hello)
+          ],
+          authenticatorSelection: {
+            authenticatorAttachment: "platform", // بصمة الجهاز المدمجة (يمنع No passkeys / Use different device)
+            userVerification: "required",        // إلزام البصمة أو قفل الشاشة
+            residentKey: "preferred"
+          },
+          timeout: 60000,
+          attestation: "none"
+        }
+      };
+
+      const newCredential = await navigator.credentials.create(createOptions);
+      if (newCredential && newCredential.rawId) {
+        const base64Id = btoa(String.fromCharCode(...new Uint8Array(newCredential.rawId)));
+        localStorage.setItem(storageKey, base64Id);
+        return { success: true, credential: newCredential };
+      }
+
+      throw new Error('BIOMETRICS_FAILED');
+    };
+
     // Biometric Login via WebAuthn API (Local Device Biometrics) with Graceful PIN Fallback
     const executeBioLogin = async () => {
       const sel = document.getElementById('authBioEmpSelect');
@@ -2602,71 +2698,42 @@
         showToast('يرجى اختيار موظف للتحقق من البصمة', 'warning');
         return;
       }
+      const empName = sel?.options[sel.selectedIndex]?.text || '';
 
-      // 1. التحقق أولاً مما إذا كان الجهاز يدعم البصمة الحيوية
-      let isBioSupported = false;
-      if (window.PublicKeyCredential && typeof window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable === 'function') {
-        try {
-          isBioSupported = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-        } catch (e) {
-          isBioSupported = false;
-        }
-      }
-
-      // 2. إذا كان الجهاز لا يدعم البصمة -> تطبيق الـ Fallback
-      if (!isBioSupported || !navigator.credentials || !navigator.credentials.get) {
-        authScannerWidget?.classList.remove('scanning');
-        sound.playAlert();
-        authTabPinBtn?.click();
-        showToast('تعذر التحقق من البصمة، يرجى إدخال رمز الـ PIN', 'warning', 4000);
-        return;
-      }
-
-      // 3. استدعاء واجهة البصمة الأصلية للجهاز باستخدام WebAuthn
       authScannerWidget?.classList.add('scanning');
       sound.playClick();
 
       try {
-        const challenge = new Uint8Array(32);
-        if (window.crypto && window.crypto.getRandomValues) {
-          window.crypto.getRandomValues(challenge);
-        }
-
-        const requestOptions = {
-          publicKey: {
-            challenge: challenge,
-            timeout: 60000,
-            userVerification: 'required'
-          }
-        };
-
-        if (window.location && window.location.hostname && window.location.hostname !== '') {
-          requestOptions.publicKey.rpId = window.location.hostname;
-        }
-
-        const credential = await navigator.credentials.get(requestOptions);
+        await requestDeviceBiometricVerification(empId, empName);
         authScannerWidget?.classList.remove('scanning');
 
-        // في حال نجاح البصمة (Success):
+        // في حال نجاح بصمة الجهاز (Success):
         const rememberMe = authRememberMeCheck ? authRememberMeCheck.checked : true;
         const res = await ApiService.loginWithFingerprint(empId, rememberMe);
         const user = res.user || res.data?.user || res.employee || res.data?.employee;
         if (res.success && user) {
           sound.playSuccess();
           const permissions = res.data?.permissions || res.permissions;
-          showToast(`تم تسجيل الدخول بنجاح! مرحباً بك يا ${user.fullName}`, 'success', 3000);
+          showToast(`تم التحقق من بصمة الجهاز بنجاح! مرحباً بك يا ${user.fullName}`, 'success', 3000);
           await applyUserRoleAndNavigate(user, permissions);
         } else {
           sound.playError();
-          showToast(res.message || res.error || 'فشل التحقق من البصمة الحيوية', 'error', 3500);
+          showToast(res.message || res.error || 'فشل تسجيل الدخول', 'error', 3500);
         }
       } catch (bioErr) {
-        // في حال الفشل أو تراجع المستخدم (Fallback):
-        console.warn('[WebAuthn Biometrics Fallback]:', bioErr);
         authScannerWidget?.classList.remove('scanning');
+        console.warn('[WebAuthn Biometrics Fallback]:', bioErr);
         sound.playAlert();
-        authTabPinBtn?.click();
-        showToast('تعذر التحقق من البصمة، يرجى إدخال رمز الـ PIN', 'warning', 4000);
+
+        if (bioErr && (bioErr.name === 'NotAllowedError' || bioErr.name === 'AbortError')) {
+          showToast('تم إلغاء طلب بصمة الجهاز. يمكنك المحاولة مجدداً أو إدخال رمز PIN', 'warning', 4000);
+        } else if (bioErr && bioErr.message === 'NO_PLATFORM_AUTHENTICATOR') {
+          authTabPinBtn?.click();
+          showToast('هذا الجهاز لا يدعم البصمة المدمجة، يرجى إدخال رمز الـ PIN', 'warning', 4000);
+        } else {
+          authTabPinBtn?.click();
+          showToast('تعذر التحقق من بصمة الجهاز، يرجى إدخال رمز الـ PIN', 'warning', 4000);
+        }
       }
     };
 
@@ -4892,68 +4959,39 @@
       resetPin();
     });
 
-    // Scanner Widget Click & Button Punch (WebAuthn Local Device Biometrics)
+    // Scanner Widget Click & Button Punch (Native Device Biometrics)
     const executeFingerprintScan = async () => {
       const selectedEmpId = kioskEmpSelect?.value;
       if (!selectedEmpId) {
         showToast('يرجى اختيار موظف للتحقق من البصمة', 'warning');
         return;
       }
+      const selectedEmpName = kioskEmpSelect?.options[kioskEmpSelect.selectedIndex]?.text || '';
 
-      // 1. التحقق أولاً مما إذا كان الجهاز يدعم البصمة الحيوية
-      let isBioSupported = false;
-      if (window.PublicKeyCredential && typeof window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable === 'function') {
-        try {
-          isBioSupported = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-        } catch (e) {
-          isBioSupported = false;
-        }
-      }
-
-      // 2. إذا كان الجهاز لا يدعم البصمة -> تطبيق الـ Fallback
-      if (!isBioSupported || !navigator.credentials || !navigator.credentials.get) {
-        scannerWidget?.classList.remove('scanning');
-        sound.playAlert();
-        modePinBtn?.click();
-        showToast('تعذر التحقق من البصمة، يرجى إدخال رمز الـ PIN', 'warning', 4000);
-        return;
-      }
-
-      // 3. استدعاء واجهة البصمة الأصلية للجهاز باستخدام WebAuthn
       scannerWidget?.classList.add('scanning');
       sound.playClick();
 
       try {
-        const challenge = new Uint8Array(32);
-        if (window.crypto && window.crypto.getRandomValues) {
-          window.crypto.getRandomValues(challenge);
-        }
-
-        const requestOptions = {
-          publicKey: {
-            challenge: challenge,
-            timeout: 60000,
-            userVerification: 'required'
-          }
-        };
-
-        if (window.location && window.location.hostname && window.location.hostname !== '') {
-          requestOptions.publicKey.rpId = window.location.hostname;
-        }
-
-        const credential = await navigator.credentials.get(requestOptions);
+        await requestDeviceBiometricVerification(selectedEmpId, selectedEmpName);
         scannerWidget?.classList.remove('scanning');
 
-        // في حال نجاح البصمة (Success):
+        // في حال نجاح بصمة الجهاز (Success):
         const res = await ApiService.loginWithFingerprint(selectedEmpId, true);
         handlePunchResult(res);
       } catch (bioErr) {
-        // في حال الفشل أو تراجع المستخدم (Fallback):
         console.warn('[WebAuthn Kiosk Fingerprint Fallback]:', bioErr);
         scannerWidget?.classList.remove('scanning');
         sound.playAlert();
-        modePinBtn?.click();
-        showToast('تعذر التحقق من البصمة، يرجى إدخال رمز الـ PIN', 'warning', 4000);
+
+        if (bioErr && (bioErr.name === 'NotAllowedError' || bioErr.name === 'AbortError')) {
+          showToast('تم إلغاء مسح البصمة من الجهاز', 'warning', 3500);
+        } else if (bioErr && bioErr.message === 'NO_PLATFORM_AUTHENTICATOR') {
+          modePinBtn?.click();
+          showToast('هذا الجهاز لا يدعم البصمة المدمجة، يرجى إدخال رمز الـ PIN', 'warning', 4000);
+        } else {
+          modePinBtn?.click();
+          showToast('تعذر التحقق من البصمة، يرجى إدخال رمز الـ PIN', 'warning', 4000);
+        }
       }
     };
 
