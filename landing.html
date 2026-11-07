@@ -234,13 +234,13 @@
             <!-- Manager Secret PIN -->
             <div class="sm:col-span-2">
               <label for="pin" class="block text-xs font-bold text-slate-200 mb-1.5">
-                رمز PIN السري لدخول المدير (4 إلى 6 أرقام) <span class="text-rose-400">*</span>
+                رمز PIN السري لدخول المدير (6 أرقام غير مكررة) <span class="text-rose-400">*</span>
               </label>
               <div class="relative">
                 <i class="fa-solid fa-key absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
-                <input type="password" id="pin" required maxlength="6" minlength="4" placeholder="••••" class="w-full pr-10 pl-3.5 py-2.5 rounded-xl text-xs sm:text-sm bg-slate-900/90 text-white border border-slate-700 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/30 transition-all font-mono text-center tracking-widest text-base font-bold placeholder:text-slate-500">
+                <input type="password" id="pin" required maxlength="6" minlength="6" pattern="[0-9]{6}" inputmode="numeric" placeholder="مثال: 852963" class="w-full pr-10 pl-3.5 py-2.5 rounded-xl text-xs sm:text-sm bg-slate-900/90 text-white border border-slate-700 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/30 transition-all font-mono text-center tracking-widest text-base font-bold placeholder:text-slate-500">
               </div>
-              <p class="text-[11px] text-slate-400 mt-1">يُستخدم هذا الرمز السري لتسجيل دخول المدير عبر بوابة البصمة ورمز الـ PIN السريع.</p>
+              <p class="text-[11px] text-slate-400 mt-1">يُستخدم هذا الرمز السري لتسجيل دخول المدير عبر بوابة البصمة ورمز الـ PIN السريع (يجب أن يكون فريداً وغير مستخدم بالنظام).</p>
             </div>
 
           </div>
@@ -377,6 +377,11 @@
         const phone = document.getElementById('phone').value.trim();
         const email = document.getElementById('email').value.trim();
         const pin = document.getElementById('pin').value.trim();
+
+        if (!pin || pin.length !== 6 || !/^\d{6}$/.test(pin)) {
+          showError('يرجى إدخال رمز PIN سري للمدير مكون من 6 أرقام تماماً.');
+          return;
+        }
 
         const submitBtn = regForm.querySelector('button[type="submit"]');
         const origBtnText = submitBtn ? submitBtn.innerHTML : '';

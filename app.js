@@ -762,6 +762,7 @@
 
     // إدارة عناصر الواجهة بناءً على الصلاحيات والرتبة
     updateRoleBasedUI(roleType);
+    await updateCurrentCompanyHeader(user);
 
     // توجيه المستخدم حسب دوره:
     // موظف -> شاشته الشخصية فقط
@@ -770,6 +771,68 @@
       switchPortal('employee');
     } else {
       switchPortal('admin');
+    }
+  }
+
+  /**
+   * تحديث اسم وهوية الشركة الحالية في الترويسة الرئيسية ولوحة التحكم بناءً على المستأجر المسجل
+   * @param {Object} [user]
+   */
+  async function updateCurrentCompanyHeader(user = null) {
+    try {
+      const activeUser = user || store.state.currentUser;
+      const companyId = activeUser?.company_id || ApiService.getCurrentCompanyId();
+      
+      const headerTitle = document.getElementById('appHeaderCompanyName');
+      const headerBadge = document.getElementById('appHeaderCompanyBadge');
+      const headerBadgeText = document.getElementById('appHeaderCompanyBadgeText');
+      const drawerBadge = document.getElementById('drawerCompanyBadge');
+      const dashboardBadge = document.getElementById('dashboardTenantBadge');
+      const dashboardName = document.getElementById('dashboardTenantName');
+
+      // إذا كانت الشركة الجذرية / المبرمج
+      if (!companyId || companyId === '11111111-2222-3333-4444-555555555555') {
+        if (headerTitle) headerTitle.textContent = 'لإدارة الحضور والرواتب';
+        if (headerBadge) headerBadge.classList.add('hidden');
+        if (drawerBadge) drawerBadge.classList.add('hidden');
+        if (dashboardBadge) dashboardBadge.classList.add('hidden');
+        return;
+      }
+
+      // جلب اسم الشركة من بيانات المستخدم أو LocalDatabase أو ApiService
+      let companyName = activeUser?.company_name || activeUser?.companyName;
+      if (!companyName) {
+        const db = LocalDatabase.getDB();
+        const found = (db.companies || []).find(c => c.id === companyId);
+        if (found) companyName = found.name || found.companyName || found.company_name;
+      }
+
+      if (!companyName) {
+        const compRes = await ApiService.getCompanySettings();
+        if (compRes && compRes.success && compRes.data?.companyName) {
+          companyName = compRes.data.companyName;
+        }
+      }
+
+      const cleanName = companyName || 'الشركة الشريكة';
+
+      if (headerTitle) {
+        headerTitle.textContent = `| ${cleanName}`;
+      }
+      if (headerBadge && headerBadgeText) {
+        headerBadgeText.textContent = cleanName;
+        headerBadge.classList.remove('hidden');
+      }
+      if (drawerBadge) {
+        drawerBadge.textContent = cleanName;
+        drawerBadge.classList.remove('hidden');
+      }
+      if (dashboardBadge && dashboardName) {
+        dashboardName.textContent = cleanName;
+        dashboardBadge.classList.remove('hidden');
+      }
+    } catch (err) {
+      console.warn('Failed to update company header:', err);
     }
   }
 
@@ -2775,6 +2838,13 @@
       }
     });
 
+    // Submit Button for PIN
+    const authPinSubmitBtn = document.getElementById('authPinSubmitBtn');
+    authPinSubmitBtn?.addEventListener('click', () => {
+      sound.playClick();
+      submitAuthPinLogin();
+    });
+
     // Keyboard support for Auth PIN
     window.addEventListener('keydown', (e) => {
       if (store.state.currentPortal !== 'auth') return;
@@ -2795,6 +2865,9 @@
           store.state.authPinInput = store.state.authPinInput.slice(0, -1);
           updateAuthPinDots();
         }
+      } else if (e.key === 'Enter') {
+        sound.playClick();
+        submitAuthPinLogin();
       } else if (e.key === 'Escape') {
         resetAuthPin();
       }
@@ -2819,8 +2892,8 @@
 
   async function submitAuthPinLogin(directPin = null) {
     const pin = directPin || store.state.authPinInput;
-    if (!pin || pin.length < 6) {
-      showToast('يرجى إدخال رمز PIN المكون من 6 أرقام', 'warning');
+    if (!pin || pin.length < 4 || pin.length > 6) {
+      showToast('يرجى إدخال رمز PIN المكون من 4 إلى 6 أرقام', 'warning');
       return;
     }
     const authRememberMeCheck = document.getElementById('authRememberMeCheck');

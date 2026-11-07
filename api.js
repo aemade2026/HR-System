@@ -1426,10 +1426,10 @@ class ApiService {
           } else {
             query = query.or(`id.eq.${employeeId},employee_code.eq.${employeeId}`);
           }
-          const { data, error } = await query.maybeSingle();
-          if (data && !error) {
-            emp = this.#normalizeEmployee(data);
-            targetCompanyId = data.company_id || (data.companies && data.companies.id);
+          const { data, error } = await query.order('created_at', { ascending: false }).limit(1);
+          if (data && data.length > 0 && !error) {
+            emp = this.#normalizeEmployee(data[0]);
+            targetCompanyId = data[0].company_id || (data[0].companies && data[0].companies.id);
           }
         } catch (sbErr) {
           console.warn('[Supabase Login Fallback]:', sbErr);
@@ -1453,10 +1453,93 @@ class ApiService {
         }
       }
 
+      // 3. التحقق الذكي من مديري الشركات (Manager PIN / Company Status Check)
+      // إذا لم يتم العثور على الموظف في جدول employees، نبحث هل الـ PIN مسجل كرمز مدير لشركة
+      if (!emp && cleanPin) {
+        let compRecord = null;
+        if (supabase) {
+          try {
+            const { data: compData } = await supabase
+              .from('companies')
+              .select('*')
+              .eq('manager_pin', cleanPin)
+              .order('created_at', { ascending: false })
+              .limit(1);
+            if (compData && compData.length > 0) compRecord = compData[0];
+          } catch (e) {}
+        }
+        if (!compRecord) {
+          const db = LocalDatabase.getDB();
+          compRecord = (db.companies || []).find(c => String(c.pin || c.manager_pin || '').trim() === cleanPin);
+        }
+
+        if (compRecord) {
+          const cName = compRecord.name || compRecord.companyName || compRecord.company_name || 'الشركة';
+          if (compRecord.status === 'pending') {
+            return this.#createEnvelope(false, null, `طلب تسجيل شركة "${cName}" قيد المراجعة والاعتماد حالياً من قبل الإدارة وسيتم تفعيل حسابكم فوراً.`);
+          }
+          if (compRecord.status === 'suspended' || compRecord.is_active === false) {
+            return this.#createEnvelope(false, null, `تم إيقاف حساب شركة "${cName}". يرجى التواصل مع إدارة النظام.`);
+          }
+
+          // الشركة معتمدة ونشطة! إنشاء حساب الموظف المدير وتأمينه فوراً
+          targetCompanyId = compRecord.id;
+          const mgrName = compRecord.manager_name || compRecord.managerName || 'مدير عام الشركة';
+          const mgrEmail = compRecord.manager_email || compRecord.email || `admin@comp-${String(targetCompanyId).slice(0, 8)}.com`;
+          const mgrPhone = compRecord.manager_phone || compRecord.phone || '';
+
+          emp = this.#normalizeEmployee({
+            id: `MGR-${String(targetCompanyId).slice(0, 8)}`,
+            employee_code: `MGR-${String(targetCompanyId).slice(0, 8)}`,
+            company_id: targetCompanyId,
+            fullName: mgrName,
+            firstName: mgrName.split(' ')[0],
+            lastName: mgrName.split(' ').slice(1).join(' ') || '',
+            email: mgrEmail,
+            phone: mgrPhone,
+            pin: cleanPin,
+            role: 'admin',
+            status: 'active',
+            department: 'الإدارة العامة',
+            jobTitle: 'مدير عام الشركة (Admin)',
+            baseSalary: 15000,
+            housingAllowance: 2000,
+            transportAllowance: 1000,
+            otherAllowances: 1000,
+            salaryStatus: 'processing',
+            leaveBalance: 21,
+            hireDate: new Date().toISOString().split('T')[0]
+          });
+
+          // مزامنة فورية في جدول employees في Supabase إذا لم يكن موجوداً
+          if (supabase) {
+            try {
+              const sbPayload = this.#toSupabaseEmployee(emp, targetCompanyId);
+              sbPayload.role = 'admin';
+              sbPayload.status = 'active';
+              await supabase.from('employees').upsert([sbPayload], { onConflict: 'email' });
+            } catch (sbSyncErr) {
+              console.warn('[Sync Manager Emp to Supabase]:', sbSyncErr);
+            }
+          }
+
+          // حفظ محلياً في LocalDatabase لضمان استقرار العمل بلا انقطاع
+          const db = LocalDatabase.getDB();
+          if (!Array.isArray(db.employees)) db.employees = [];
+          const existIdx = db.employees.findIndex(e => e.id === emp.id || e.email === emp.email || e.pin === cleanPin);
+          if (existIdx >= 0) {
+            db.employees[existIdx] = { ...db.employees[existIdx], ...emp };
+          } else {
+            db.employees.push(emp);
+          }
+          LocalDatabase.saveDB(db);
+        }
+      }
+
       if (!emp) {
         const errMsg = credentialEmail
           ? 'البريد الإلكتروني المدخل غير مسجل بالنظام!'
-          : (cleanPin ? 'رمز PIN المكون من 6 أرقام غير صحيح!' : 'بصمة الإصبع أو كود الموظف غير مسجل بالنظام!');
+          : (cleanPin ? 'رمز PIN المدخل غير مسجل لأي حساب نشط بالنظام!' : 'بصمة الإصبع أو كود الموظف غير مسجل بالنظام!');
         return this.#createEnvelope(false, null, errMsg, { message: errMsg });
       }
 
@@ -1487,12 +1570,17 @@ class ApiService {
         return this.#createEnvelope(false, null, 'تم إيقاف هذا الحساب، يرجى مراجعة إدارة الموارد البشرية');
       }
 
-      // حفظ معرّف الشركة المستأجرة (company_id) فورياً في sessionStorage و localStorage
-      targetCompanyId = targetCompanyId || emp.company_id || 'COMP-001';
+      // استخراج وتأكيد اسم الشركة التابع لها الموظف
+      targetCompanyId = targetCompanyId || emp.company_id || '11111111-2222-3333-4444-555555555555';
       this.setCurrentCompanyId(targetCompanyId);
       emp.company_id = targetCompanyId;
 
       const db = LocalDatabase.getDB();
+      if (!emp.company_name) {
+        const foundComp = (db.companies || []).find(c => c.id === targetCompanyId);
+        if (foundComp) emp.company_name = foundComp.name || foundComp.companyName;
+      }
+
       const userRole = emp.role || 'employee';
       const normalizedRole = (userRole === 'admin') ? 'programmer' : (userRole === 'hr' ? 'manager' : userRole);
       const roleArabic = this.getRoleArabicTitle(userRole);
@@ -1506,6 +1594,7 @@ class ApiService {
         authMethod: authMethod,
         company_id: targetCompanyId,
         companyId: targetCompanyId,
+        company_name: emp.company_name || null,
         loginTime: new Date().toISOString(),
         rememberMe: shouldRemember
       };
@@ -1561,6 +1650,67 @@ class ApiService {
 
   static async loginWithPin(pin, rememberMe = true) {
     return this.login({ pin, rememberMe }, rememberMe);
+  }
+
+  /**
+   * فحص شامل لفريد بودن رمز الـ PIN على مستوى النظام بأكمله (Supabase + LocalDatabase)
+   * يضمن منع تكرار أي رمز PIN بين جميع الموظفين والشركات والمديرين
+   * @param {string} pin
+   * @param {string|null} [excludeEmployeeId=null]
+   * @param {string|null} [excludeCompanyId=null]
+   * @returns {Promise<boolean>}
+   */
+  static async isPinTaken(pin, excludeEmployeeId = null, excludeCompanyId = null) {
+    if (!pin) return false;
+    const cleanPin = String(pin).trim();
+    if (!cleanPin) return false;
+
+    // 1. فحص في Supabase (سواء في جدول employees أو companies)
+    if (supabase) {
+      try {
+        // فحص جدول الموظفين
+        let empQuery = supabase.from('employees').select('id, employee_code, pin').eq('pin', cleanPin);
+        if (excludeEmployeeId) {
+          empQuery = empQuery.neq('id', excludeEmployeeId).neq('employee_code', excludeEmployeeId);
+        }
+        const { data: emps, error: empErr } = await empQuery.limit(1);
+        if (!empErr && Array.isArray(emps) && emps.length > 0) {
+          return true;
+        }
+
+        // فحص جدول الشركات (manager_pin)
+        let compQuery = supabase.from('companies').select('id, manager_pin').eq('manager_pin', cleanPin);
+        if (excludeCompanyId) {
+          compQuery = compQuery.neq('id', excludeCompanyId);
+        }
+        const { data: comps, error: compErr } = await compQuery.limit(1);
+        if (!compErr && Array.isArray(comps) && comps.length > 0) {
+          return true;
+        }
+      } catch (sbErr) {
+        console.warn('[Supabase isPinTaken check]:', sbErr);
+      }
+    }
+
+    // 2. فحص في LocalDatabase
+    const db = LocalDatabase.getDB();
+
+    // فحص الموظفين المحليين
+    const isEmpMatch = (db.employees || []).some(e => {
+      if (excludeEmployeeId && (e.id === excludeEmployeeId || e.employee_code === excludeEmployeeId)) return false;
+      return String(e.pin || '').trim() === cleanPin;
+    });
+    if (isEmpMatch) return true;
+
+    // فحص الشركات المحلية
+    const isCompMatch = (db.companies || []).some(c => {
+      if (excludeCompanyId && c.id === excludeCompanyId) return false;
+      const cPin = String(c.pin || c.manager_pin || '').trim();
+      return cPin === cleanPin;
+    });
+    if (isCompMatch) return true;
+
+    return false;
   }
 
   static async loginWithFingerprint(employeeId, rememberMe = true) {
@@ -1681,9 +1831,12 @@ class ApiService {
       const newId = await this.getNextEmployeeId();
       const cleanPin = String(onboardingData.pin).trim();
 
-      // فحص عدم تكرار الـ PIN محلياً
-      if ((db.employees || []).some(e => String(e.pin).trim() === cleanPin)) {
-        return this.#createEnvelope(false, null, 'رمز PIN المختار مستخدم بالفعل، يرجى اختيار رمز آخر مكون من 6 أرقام');
+      // فحص عدم تكرار الـ PIN على مستوى النظام بأكمله
+      const pinTaken = await this.isPinTaken(cleanPin);
+      if (pinTaken) {
+        return this.#createEnvelope(false, null, 'رمز الـ PIN هذا مستخدم بالفعل لموظف أو مسؤول آخر بالنظام! يرجى اختيار رمز PIN سري فريد وغير مكرر.', {
+          message: 'رمز الـ PIN هذا مستخدم بالفعل لموظف أو مسؤول آخر بالنظام! يرجى اختيار رمز PIN سري فريد وغير مكرر.'
+        });
       }
 
       const fullName = `${onboardingData.firstName || ''} ${onboardingData.secondName || ''} ${onboardingData.lastName || ''}`.trim();
@@ -2207,7 +2360,7 @@ class ApiService {
           if (data && !error) {
             comp = {
               ...comp,
-              companyName: data.name || comp.companyName,
+              companyName: data.name || data.company_name || comp.companyName,
               company_lat: data.company_lat ?? data.latitude ?? comp.company_lat,
               company_lng: data.company_lng ?? data.longitude ?? comp.company_lng,
               allowed_radius_meters: data.allowed_radius_meters ?? comp.allowed_radius_meters,
@@ -2216,6 +2369,21 @@ class ApiService {
           }
         } catch (sbErr) {
           console.warn('[Supabase getCompanySettings Fallback]:', sbErr);
+        }
+      }
+
+      // إذا كانت شركة مستأجرة نبحث في db.companies لضمان استقرار العرض أوفلاين
+      if (companyId && companyId !== '11111111-2222-3333-4444-555555555555') {
+        const localComp = (db.companies || []).find(c => c.id === companyId);
+        if (localComp) {
+          comp = {
+            ...comp,
+            companyName: localComp.name || localComp.companyName || localComp.company_name || comp.companyName,
+            taxNumber: localComp.tax_number || localComp.taxNumber || comp.taxNumber,
+            phone: localComp.phone || localComp.manager_phone || comp.phone,
+            email: localComp.email || localComp.manager_email || comp.email,
+            ...localComp
+          };
         }
       }
 
@@ -2310,6 +2478,22 @@ class ApiService {
       const db = LocalDatabase.getDB();
       if (!Array.isArray(db.companies)) db.companies = cloneData(INITIAL_DATABASE.companies || []);
 
+      // البحث عن أي طلب معلق سابق بنفس البريد أو الشركة لتحديثه
+      let existingPending = db.companies.find(c => 
+        c.status === 'pending' && (
+          (email && c.email && c.email.toLowerCase() === email) ||
+          (c.companyName && c.companyName.toLowerCase() === companyName.toLowerCase())
+        )
+      );
+
+      // فحص فريد وشامل لمنع تكرار رمز الـ PIN السري على مستوى النظام بأكمله
+      const pinTaken = await this.isPinTaken(pin, null, existingPending?.id);
+      if (pinTaken) {
+        return this.#createEnvelope(false, null, 'رمز الـ PIN السري هذا مستخدم بالفعل لحساب آخر بالنظام! يرجى اختيار رمز PIN سري مميز وغير مكرر.', {
+          message: 'رمز الـ PIN السري هذا مستخدم بالفعل لحساب آخر بالنظام! يرجى اختيار رمز PIN سري مميز وغير مكرر.'
+        });
+      }
+
       // 1. فحص عدم تكرار البريد الإلكتروني مع الشركات المفعلة فقط
       if (supabase && email) {
         try {
@@ -2345,18 +2529,13 @@ class ApiService {
         });
       }
 
-      // البحث عن أي طلب معلق سابق بنفس البريد أو الشركة لتحديثه
-      let existingPending = db.companies.find(c => 
-        c.status === 'pending' && (
-          (email && c.email && c.email.toLowerCase() === email) ||
-          (c.companyName && c.companyName.toLowerCase() === companyName.toLowerCase())
-        )
-      );
-
-      // توليد معرف UUID فريد للشركة
-      const companyId = existingPending?.id || ((typeof crypto !== 'undefined' && crypto.randomUUID)
+      // توليد معرف UUID فريد للشركة متوافق مع معايير Supabase
+      const companyId = existingPending?.id || ((typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
         ? crypto.randomUUID()
-        : 'comp-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9));
+        : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+            const r = Math.random() * 16 | 0;
+            return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+          }));
 
       const newTenant = {
         id: companyId,
@@ -3619,10 +3798,13 @@ class ApiService {
       const companyId = this.getCurrentCompanyId();
       const db = LocalDatabase.getDB();
 
-      if ((db.employees || []).some(e => String(e.pin).trim() === String(empData.pin).trim())) {
-        return this.#createEnvelope(false, null, 'رمز PIN مستخدم بالفعل لموظف آخر، يرجى توليد رمز مختلف', {
-          message: 'رمز PIN مستخدم بالفعل لموظف آخر، يرجى توليد رمز مختلف'
-        });
+      if (empData.pin) {
+        const pinTaken = await this.isPinTaken(empData.pin);
+        if (pinTaken) {
+          return this.#createEnvelope(false, null, 'رمز الـ PIN المدخل مستخدم بالفعل لحساب آخر بالنظام! يرجى اختيار رمز PIN فريد.', {
+            message: 'رمز الـ PIN المدخل مستخدم بالفعل لحساب آخر بالنظام! يرجى اختيار رمز PIN فريد.'
+          });
+        }
       }
 
       const newId = empData.id || await this.getNextEmployeeId();
@@ -3678,8 +3860,13 @@ class ApiService {
       const safeFields = { ...updatedFields };
       delete safeFields.company_id; // حماية عزل المستأجر
 
-      if (safeFields.pin && (db.employees || []).some(e => String(e.pin).trim() === String(safeFields.pin).trim() && e.id !== id)) {
-        return this.#createEnvelope(false, null, 'رمز PIN مستخدم لموظف آخر بالفعل', { message: 'رمز PIN مستخدم لموظف آخر بالفعل' });
+      if (safeFields.pin) {
+        const pinTaken = await this.isPinTaken(safeFields.pin, id);
+        if (pinTaken) {
+          return this.#createEnvelope(false, null, 'رمز الـ PIN المدخل مستخدم بالفعل لموظف أو مسؤول آخر بالنظام! يرجى اختيار رمز مختلف.', {
+            message: 'رمز الـ PIN المدخل مستخدم بالفعل لموظف أو مسؤول آخر بالنظام! يرجى اختيار رمز مختلف.'
+          });
+        }
       }
 
       // 1. التحديث في Supabase أولاً مع فلتر company_id الإجباري
