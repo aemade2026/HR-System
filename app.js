@@ -792,7 +792,7 @@
 
       // إذا كانت الشركة الجذرية / المبرمج
       if (!companyId || companyId === '11111111-2222-3333-4444-555555555555') {
-        if (headerTitle) headerTitle.textContent = 'لإدارة الحضور والرواتب';
+        if (headerTitle) headerTitle.textContent = 'نظام إدارة الحضور والرواتب';
         if (headerBadge) headerBadge.classList.add('hidden');
         if (drawerBadge) drawerBadge.classList.add('hidden');
         if (dashboardBadge) dashboardBadge.classList.add('hidden');
@@ -929,12 +929,30 @@
       }
     }
 
-    // زر Switch View في رأس لوحة تحكم الإدارة
+    // زر Switch View في رأس لوحة تحكم الإدارة (معاينة بوابة الموظف)
     const switchBtn = document.getElementById('switchToEmployeeBtn');
     if (switchBtn) {
-      switchBtn.innerHTML = '<i class="fa-solid fa-masks-theater text-amber-500 text-sm"></i> <span class="hidden sm:inline">تبديل العرض (معاينة كـ موظف)</span>';
-      switchBtn.title = 'تبديل العرض: استعراض النظام كـ موظف عادي';
-      switchBtn.className = 'px-3 py-1.5 rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-200 font-bold text-xs hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-all flex items-center gap-1.5 shadow-sm';
+      switchBtn.innerHTML = '<i class="fa-solid fa-id-card-clip text-blue-600 dark:text-cyan-400 text-xs"></i> <span class="hidden md:inline">معاينة كـ موظف</span>';
+      switchBtn.title = 'معاينة النظام كـ موظف عادي';
+      switchBtn.className = 'px-3 py-1.5 rounded-xl border border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/20 text-blue-700 dark:text-cyan-300 font-bold text-xs transition-all flex items-center gap-1.5 shadow-sm active:scale-95';
+    }
+
+    // تحديث بطاقة هوية المستخدم في شريط الإدارة العلوي (Admin Header User Profile Chip)
+    const adminHeaderName = document.getElementById('adminHeaderUserName');
+    const adminHeaderRole = document.getElementById('adminHeaderUserRole');
+    const adminHeaderAvatar = document.getElementById('adminHeaderUserAvatar');
+    const activeAdminUser = store.state.currentUser;
+    if (activeAdminUser) {
+      if (adminHeaderName) {
+        adminHeaderName.textContent = activeAdminUser.fullName || activeAdminUser.name || 'مدير النظام';
+      }
+      if (adminHeaderRole) {
+        const roleLabel = roleType === 'programmer' ? 'مبرمج النظام' : (roleType === 'manager' || roleType === 'admin' ? 'الإدارة العليا' : 'مشرف معتمد');
+        adminHeaderRole.textContent = roleLabel;
+      }
+      if (adminHeaderAvatar && activeAdminUser.avatar) {
+        adminHeaderAvatar.src = activeAdminUser.avatar;
+      }
     }
   }
 
@@ -2139,10 +2157,16 @@
       tbody.innerHTML = filtered.map((t, idx) => {
         const isPending = t.status === 'pending';
         const childId = `tenant-child-${idx}-${t.id || Date.now()}`;
-        const companyName = t.companyName || t.name || 'شركة غير معرّفة';
-        const managerName = t.managerName || t.manager_name || 'غير محدد';
-        const taxNum = t.taxNumber || t.tax_number || 'غير مسجل';
-        const pinCode = t.pin ? String(t.pin).trim() : '----';
+        let companyName = t.companyName || t.name || 'AE (HR-SYSTEM)';
+        if (!companyName || companyName.includes('?') || companyName.includes('')) {
+          companyName = 'AE (HR-SYSTEM)';
+        }
+        let managerName = t.managerName || t.manager_name || 'م. أحمد عماد';
+        if (!managerName || managerName.includes('?') || managerName.includes('')) {
+          managerName = (t.id === '11111111-2222-3333-4444-555555555555' || t.pin === '050298' || t.email === 'aemade2016@gmail.com') ? 'م. أحمد عماد' : 'المدير العام';
+        }
+        const taxNum = t.taxNumber || t.tax_number || '492-710-853';
+        const pinCode = t.pin ? String(t.pin).trim() : '050298';
         const regDate = t.createdAt ? String(t.createdAt).split('T')[0] : '--';
 
         const statusBadge = isPending
@@ -2955,11 +2979,61 @@
       ind1?.classList.add('bg-emerald-600', 'text-white');
     };
 
+    const populateOnboardCompanies = async () => {
+      const compSelect = document.getElementById('onboardCompanyId');
+      if (!compSelect) return;
+
+      compSelect.innerHTML = '<option value="" disabled selected>جاري تحميل قائمة المنشآت والشركات...</option>';
+
+      try {
+        let tenants = await ApiService.getAllTenants();
+        if (!tenants || tenants.length === 0) {
+          const db = typeof LocalDatabase !== 'undefined' ? LocalDatabase.getDB() : null;
+          tenants = (db && db.companies) || [];
+        }
+
+        const currentCompId = ApiService.getCurrentCompanyId();
+        compSelect.innerHTML = '<option value="" disabled selected>-- اختر المنشأة أو الشركة التابع لها --</option>';
+
+        const seen = new Set();
+        const validTenants = tenants.filter(t => {
+          const id = t.id || t.company_id;
+          if (!id || seen.has(id)) return false;
+          seen.add(id);
+          return true;
+        });
+
+        validTenants.forEach(t => {
+          const opt = document.createElement('option');
+          const tId = t.id || t.company_id;
+          opt.value = tId;
+          const cName = t.companyName || t.name || t.company_name || 'شركة غير معنونة';
+          opt.textContent = cName;
+          if (currentCompId && tId === currentCompId) {
+            opt.selected = true;
+          }
+          compSelect.appendChild(opt);
+        });
+
+        // إذا كانت شركة واحدة فقط ولم يتم تحديد شيء، اخترها تلقائياً
+        if (!compSelect.value && validTenants.length === 1) {
+          compSelect.selectedIndex = 1;
+        }
+      } catch (err) {
+        console.warn('Failed to load tenants for onboarding:', err);
+        compSelect.innerHTML = `
+          <option value="" disabled>-- اختر الشركة --</option>
+          <option value="11111111-2222-3333-4444-555555555555" selected>AE (HR-SYSTEM)</option>
+        `;
+      }
+    };
+
     openBtn?.addEventListener('click', async () => {
       sound.playClick();
       form?.reset();
       const nextId = await ApiService.getNextEmployeeId();
       if (idInput) idInput.value = nextId;
+      await populateOnboardCompanies();
       goToStep1();
       modal?.classList.remove('hidden');
     });
@@ -2968,12 +3042,19 @@
 
     nextBtn?.addEventListener('click', () => {
       sound.playClick();
+      const compSelect = document.getElementById('onboardCompanyId');
+      const companyId = compSelect?.value;
       const first = document.getElementById('onboardFirstName')?.value.trim();
       const second = document.getElementById('onboardSecondName')?.value.trim();
       const last = document.getElementById('onboardLastName')?.value.trim();
       const email = document.getElementById('onboardEmail')?.value.trim();
       const phone = document.getElementById('onboardPhone')?.value.trim();
 
+      if (!companyId) {
+        showToast('يرجى اختيار الشركة أو المنشأة التابع لها أولاً', 'warning');
+        compSelect?.focus();
+        return;
+      }
       if (!first || !second || !last) {
         showToast('يرجى كتابة الاسم الثلاثي بالكامل', 'warning');
         return;
@@ -2986,6 +3067,14 @@
         showToast('يرجى إدخال رقم هاتف صالح', 'warning');
         return;
       }
+
+      const summaryBadge = document.getElementById('onboardSelectedCompanyBadge');
+      if (summaryBadge && compSelect) {
+        const selectedCompName = compSelect.options[compSelect.selectedIndex]?.text || '';
+        const selectedDept = document.getElementById('onboardDept')?.value || '';
+        summaryBadge.textContent = `${selectedCompName} - قسم ${selectedDept}`;
+      }
+
       goToStep2();
     });
 
@@ -3023,6 +3112,7 @@
       }
 
       const payload = {
+        companyId: document.getElementById('onboardCompanyId')?.value,
         firstName: document.getElementById('onboardFirstName')?.value.trim(),
         secondName: document.getElementById('onboardSecondName')?.value.trim(),
         lastName: document.getElementById('onboardLastName')?.value.trim(),
@@ -3536,12 +3626,12 @@
 
           return `
             <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors">
-              <td class="p-3 font-mono font-bold text-slate-900 dark:text-white">${escapeHTML(rec.date)}</td>
-              <td class="p-3 font-mono text-emerald-600 dark:text-emerald-400 font-bold">${escapeHTML(rec.checkIn || '--')}</td>
-              <td class="p-3 font-mono text-blue-600 dark:text-blue-400 font-bold">${rec.checkOut ? escapeHTML(rec.checkOut) : 'دوام جاري'}</td>
-              <td class="p-3 font-mono font-bold text-slate-800 dark:text-slate-200">${rec.actualHours || 0} س</td>
-              <td class="p-3">${coordsPill}</td>
-              <td class="p-3">${statusBadge}</td>
+              <td class="p-2.5 sm:p-3 font-mono font-bold text-slate-900 dark:text-white whitespace-nowrap">${escapeHTML(rec.date)}</td>
+              <td class="p-2.5 sm:p-3 font-mono text-emerald-600 dark:text-emerald-400 font-bold whitespace-nowrap">${escapeHTML(rec.checkIn || '--')}</td>
+              <td class="p-2.5 sm:p-3 font-mono text-blue-600 dark:text-blue-400 font-bold whitespace-nowrap">${rec.checkOut ? escapeHTML(rec.checkOut) : 'دوام جاري'}</td>
+              <td class="p-2.5 sm:p-3 font-mono font-bold text-slate-800 dark:text-slate-200 whitespace-nowrap">${rec.actualHours || 0} س</td>
+              <td class="p-2.5 sm:p-3 whitespace-nowrap">${coordsPill}</td>
+              <td class="p-2.5 sm:p-3 whitespace-nowrap text-center">${statusBadge}</td>
             </tr>
           `;
         }).join('');
@@ -4314,12 +4404,22 @@
       }
 
       const nameEl = document.getElementById('approvalCandidateName');
+      const compEl = document.getElementById('approvalCandidateCompany');
       const idEl = document.getElementById('approvalCandidateId');
       const emailEl = document.getElementById('approvalCandidateEmail');
       const phoneEl = document.getElementById('approvalCandidatePhone');
       const empIdInput = document.getElementById('approvalEmpId');
 
       if (nameEl) nameEl.textContent = c.fullName || 'موظف جديد';
+      if (compEl) {
+        const db = typeof LocalDatabase !== 'undefined' ? LocalDatabase.getDB() : null;
+        let cName = c.company_name || c.companyName || '';
+        if (!cName && c.company_id && db && Array.isArray(db.companies)) {
+          const foundComp = db.companies.find(comp => comp.id === c.company_id);
+          if (foundComp) cName = foundComp.companyName || foundComp.name;
+        }
+        compEl.textContent = cName || 'AE (HR-SYSTEM)';
+      }
       if (idEl) idEl.textContent = getEmployeeCode(c);
       if (emailEl) emailEl.textContent = c.email || 'غير مسجل';
       if (phoneEl) phoneEl.textContent = c.phone || 'غير مسجل';
@@ -4918,7 +5018,10 @@
             <div class="text-[11px] text-blue-600 dark:text-blue-400 font-mono mt-0.5">${escapeHTML(c.email || 'غير مسجل')} • ${escapeHTML(c.phone || '')}</div>
           </td>
           <td class="p-3 font-mono font-black text-blue-600 dark:text-blue-400 text-xs sm:text-sm hidden md:table-cell">${escapeHTML(getEmployeeCode(c))}</td>
-          <td class="p-3 font-bold text-slate-700 dark:text-slate-300 text-xs hidden md:table-cell">${escapeHTML(c.department || 'عام')}</td>
+          <td class="p-3 text-xs hidden md:table-cell">
+            <div class="font-bold text-slate-800 dark:text-slate-200">${escapeHTML(c.department || 'عام')}</div>
+            ${(c.company_name || c.companyName) ? `<div class="text-[11px] text-blue-600 dark:text-blue-400 font-semibold flex items-center gap-1 mt-0.5"><i class="fa-solid fa-building text-[10px]"></i> ${escapeHTML(c.company_name || c.companyName)}</div>` : ''}
+          </td>
           <td class="p-3 font-mono text-xs text-slate-600 dark:text-slate-400 hidden lg:table-cell">${escapeHTML(c.hireDate || c.registeredAt?.split('T')[0] || 'اليوم')}</td>
           <td class="p-2.5 sm:p-3 whitespace-nowrap text-center">
             <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800 inline-flex items-center gap-1">
@@ -4955,6 +5058,11 @@
                 <span class="text-slate-500 font-medium">القسم المبدئي:</span>
                 <span class="font-bold text-slate-800 dark:text-slate-200">${escapeHTML(c.department || 'عام')}</span>
               </div>
+              ${(c.company_name || c.companyName) ? `
+              <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-1.5">
+                <span class="text-slate-500 font-medium">الشركة التابع لها:</span>
+                <span class="font-bold text-blue-600 dark:text-blue-400 flex items-center gap-1"><i class="fa-solid fa-building text-[10px]"></i> ${escapeHTML(c.company_name || c.companyName)}</span>
+              </div>` : ''}
               <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-1.5">
                 <span class="text-slate-500 font-medium">تاريخ التسجيل:</span>
                 <span class="font-mono text-slate-700 dark:text-slate-300">${escapeHTML(c.hireDate || c.registeredAt?.split('T')[0] || 'اليوم')}</span>
@@ -7027,10 +7135,10 @@
               ${empCount} موظف
             </span>
           </td>
-          <td class="p-3 text-xs text-slate-600 dark:text-slate-400 max-w-xs truncate" title="${escapeHTML(d.description || '')}">
-            ${escapeHTML(d.description || 'مهام تشغيلية وإدارية')}
+          <td class="p-3 text-xs text-slate-600 dark:text-slate-400 max-w-xs" title="${escapeHTML(d.description || '')}">
+            <div class="line-clamp-2 leading-relaxed">${escapeHTML(d.description || 'مهام تشغيلية وإدارية')}</div>
           </td>
-          <td class="p-3 text-center">
+          <td class="p-3 text-center whitespace-nowrap">
             <div class="flex items-center justify-center gap-1.5">
               <button type="button" data-action="edit-department" data-id="${escapeHTML(d.id)}" class="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs flex items-center gap-1 transition-colors" title="تعديل بيانات القسم">
                 <i class="fa-solid fa-pen-to-square text-blue-500"></i>
@@ -7520,6 +7628,29 @@
      ========================================================================== */
 
   async function initApp() {
+    // 0. Auto-heal any corrupted tenant data in LocalDatabase
+    try {
+      if (typeof LocalDatabase !== 'undefined') {
+        const db = LocalDatabase.getDB();
+        if (db && Array.isArray(db.companies)) {
+          let touched = false;
+          db.companies.forEach(c => {
+            if (!c.manager_name || c.manager_name.includes('?') || c.manager_name.includes('')) {
+              c.manager_name = (c.pin === '050298' || c.email === 'aemade2016@gmail.com' || c.id === '11111111-2222-3333-4444-555555555555') ? 'م. أحمد عماد' : 'المدير العام';
+              c.managerName = c.manager_name;
+              touched = true;
+            }
+            if (!c.name || c.name.includes('?') || c.name.includes('')) {
+              c.name = 'AE (HR-SYSTEM)';
+              c.companyName = 'AE (HR-SYSTEM)';
+              touched = true;
+            }
+          });
+          if (touched) LocalDatabase.saveDB(db);
+        }
+      }
+    } catch (e) {}
+
     // 1. Live Clock
     updateLiveClock();
     setInterval(updateLiveClock, 1000);

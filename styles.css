@@ -361,65 +361,65 @@ html.dark .custom-scrollbar::-webkit-scrollbar-thumb {
   z-index: 10;
 }
 
-/* Responsive Multi-Screen Zero-Scroll Table Architecture */
+/* Responsive Multi-Screen Scrollable Table Architecture */
 .overflow-x-auto,
 .table-responsive-wrapper {
   max-width: 100% !important;
   width: 100% !important;
   display: block;
   position: relative;
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  scrollbar-width: thin;
 }
 
-@media (min-width: 768px) {
+@media (max-width: 767px) {
   .overflow-x-auto,
   .table-responsive-wrapper {
     overflow-x: auto !important;
     -webkit-overflow-scrolling: touch !important;
-  }
-}
-
-@media (max-width: 767px) {
-  /* Zero side-scroll on mobile by user mandate */
-  .overflow-x-auto,
-  .table-responsive-wrapper {
-    overflow-x: hidden !important;
+    padding-bottom: 3px;
   }
 
   table {
-    min-width: 100% !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    table-layout: auto !important;
+    min-width: 100%;
+    width: 100%;
+    table-layout: auto;
   }
 }
 
 /* Custom sleek scrollbar for horizontal table scrolling */
 .overflow-x-auto::-webkit-scrollbar,
-.table-responsive-wrapper::-webkit-scrollbar {
-  height: 6px;
-  width: 6px;
+.table-responsive-wrapper::-webkit-scrollbar,
+.custom-scrollbar::-webkit-scrollbar {
+  height: 5px;
+  width: 5px;
 }
 
 .overflow-x-auto::-webkit-scrollbar-track,
-.table-responsive-wrapper::-webkit-scrollbar-track {
-  background: rgba(148, 163, 184, 0.1);
+.table-responsive-wrapper::-webkit-scrollbar-track,
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(148, 163, 184, 0.12);
   border-radius: 9999px;
 }
 
 .overflow-x-auto::-webkit-scrollbar-thumb,
-.table-responsive-wrapper::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.4);
+.table-responsive-wrapper::-webkit-scrollbar-thumb,
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(59, 130, 246, 0.45);
   border-radius: 9999px;
 }
 
 html.dark .overflow-x-auto::-webkit-scrollbar-thumb,
-html.dark .table-responsive-wrapper::-webkit-scrollbar-thumb {
-  background: rgba(100, 116, 139, 0.5);
+html.dark .table-responsive-wrapper::-webkit-scrollbar-thumb,
+html.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(96, 165, 250, 0.45);
 }
 
 .overflow-x-auto::-webkit-scrollbar-thumb:hover,
-.table-responsive-wrapper::-webkit-scrollbar-thumb:hover {
-  background: rgba(59, 130, 246, 0.6);
+.table-responsive-wrapper::-webkit-scrollbar-thumb:hover,
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(37, 99, 235, 0.8);
 }
 
 table {

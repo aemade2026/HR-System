@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>نظام AE (HR-SYSTEM) للموارد البشرية والرواتب | تسجيل الشركات والمشتركين الجدد (SaaS)</title>
+  <title>نظام AE HR SYSTEM للموارد البشرية والرواتب | تسجيل المنشآت والمشتركين الجدد (SaaS)</title>
   
   <!-- Progressive Web App (PWA) Meta & Manifest -->
   <link rel="manifest" href="manifest.json">
@@ -11,16 +11,16 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="AE (HR-SYSTEM)">
+  <meta name="apple-mobile-web-app-title" content="AE HR SYSTEM">
   <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
   <link rel="icon" type="image/svg+xml" href="icon.svg">
   
-  <!-- Google Fonts: Cairo -->
+  <!-- Google Fonts: Alexandria & Cairo -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@300;400;500;600;700;800;900&family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   
   <!-- Font Awesome Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -33,7 +33,7 @@
       theme: {
         extend: {
           fontFamily: {
-            sans: ['Cairo', 'sans-serif'],
+            sans: ['Alexandria', 'Cairo', 'sans-serif'],
           },
           colors: {
             brand: {
@@ -60,7 +60,7 @@
       box-sizing: border-box;
     }
     body {
-      font-family: 'Cairo', sans-serif;
+      font-family: 'Alexandria', 'Cairo', sans-serif;
     }
     .ambient-glow {
       position: fixed;
@@ -69,60 +69,68 @@
       z-index: 0;
       overflow: hidden;
       background: 
-        radial-gradient(circle 350px at 75% -10%, rgba(139, 92, 246, 0.25), transparent 70%),
-        radial-gradient(circle 280px at 15% 40%, rgba(59, 130, 246, 0.18), transparent 70%),
-        radial-gradient(circle 300px at 80% 90%, rgba(16, 185, 129, 0.14), transparent 70%);
+        radial-gradient(circle 500px at 70% -10%, rgba(139, 92, 246, 0.22), transparent 70%),
+        radial-gradient(circle 450px at 15% 35%, rgba(59, 130, 246, 0.16), transparent 70%),
+        radial-gradient(circle 400px at 80% 85%, rgba(16, 185, 129, 0.12), transparent 70%);
     }
     .glass-card {
-      background: rgba(15, 23, 42, 0.75);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      border: 1px solid rgba(139, 92, 246, 0.2);
+      background: rgba(15, 23, 42, 0.82);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(139, 92, 246, 0.25);
     }
     .glow-purple {
-      box-shadow: 0 0 35px -5px rgba(139, 92, 246, 0.3);
+      box-shadow: 0 0 50px -10px rgba(139, 92, 246, 0.25);
     }
     .bg-grid-pattern {
-      background-image: radial-gradient(rgba(139, 92, 246, 0.15) 1px, transparent 1px);
-      background-size: 30px 30px;
+      background-image: radial-gradient(rgba(147, 51, 234, 0.12) 1px, transparent 1px);
+      background-size: 32px 32px;
+    }
+    .badge-live-pulse {
+      animation: pulse-ring 2s infinite;
+    }
+    @keyframes pulse-ring {
+      0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6); }
+      70% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
     }
   </style>
 
   <!-- Supabase CDN Client -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col selection:bg-purple-600 selection:text-white bg-grid-pattern relative overflow-x-hidden">
+<body class="bg-[#080d1a] text-slate-100 min-h-screen flex flex-col selection:bg-purple-600 selection:text-white bg-grid-pattern relative overflow-x-hidden">
 
-  <!-- Ambient Background Lighting Glows (Contained to prevent any horizontal overflow) -->
+  <!-- Ambient Background Lighting Glows -->
   <div class="ambient-glow" aria-hidden="true"></div>
 
   <!-- Top Navigation Header -->
   <header class="border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md sticky top-0 z-50">
-    <div class="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 sm:h-20 flex items-center justify-between">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 sm:h-20 flex items-center justify-between gap-4">
       
       <!-- Brand Logo -->
-      <a href="landing.html" class="flex items-center gap-2 sm:gap-3.5 group">
-        <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl p-0.5 bg-gradient-to-tr from-cyan-400 via-blue-600 to-purple-600 shadow-lg shadow-purple-500/25 flex items-center justify-center shrink-0 transition-all duration-300 group-hover:scale-105 group-hover:shadow-cyan-500/30">
-          <img src="icon.svg" alt="AE HR-SYSTEM Logo" class="w-full h-full object-contain rounded-[10px] sm:rounded-[14px]">
+      <a href="landing.html" class="flex items-center gap-3 group">
+        <div class="relative w-10 h-10 sm:w-11 sm:h-11 rounded-xl p-0.5 bg-gradient-to-tr from-cyan-500 via-blue-600 to-indigo-600 shadow-md shadow-blue-500/20 ring-1 ring-white/10 flex items-center justify-center shrink-0 transition-transform duration-300 group-hover:scale-105">
+          <img src="icon.svg" alt="AE HR SYSTEM" class="w-full h-full object-contain rounded-[10px]">
+          <span class="absolute -bottom-0.5 -left-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-slate-900 badge-live-pulse"></span>
         </div>
-        <div class="flex flex-col">
-          <div class="flex items-center gap-1.5 sm:gap-2">
-            <span class="font-black tracking-tight flex items-center gap-1 font-mono" dir="ltr">
-              <span class="bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 bg-clip-text text-transparent font-black text-lg sm:text-2xl">AE</span>
-              <span class="text-[10px] sm:text-xs font-black text-cyan-300 tracking-tight bg-slate-900/90 px-1.5 py-0.5 rounded-lg border border-cyan-500/30 whitespace-nowrap">(HR-SYSTEM)</span>
-            </span>
-            <span class="hidden sm:inline-block text-[10px] px-2 py-0.5 rounded-full bg-purple-950/80 text-purple-300 border border-purple-700/60 font-mono font-extrabold uppercase tracking-wide">Cloud SaaS</span>
+        <div class="flex flex-col justify-center whitespace-nowrap">
+          <div class="flex items-center gap-2">
+            <span class="text-base sm:text-lg font-black tracking-tight bg-gradient-to-r from-cyan-400 via-blue-300 to-indigo-300 bg-clip-text text-transparent font-mono" dir="ltr">AE HR</span>
+            <span class="text-[10px] sm:text-[11px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-blue-500/10 text-cyan-300 border border-blue-500/20 font-mono">HR SYSTEM</span>
+            <span class="hidden sm:inline-block text-[10px] px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-300 border border-purple-500/20 font-mono font-bold uppercase tracking-wider">Cloud SaaS</span>
           </div>
-          <p class="hidden md:block text-[11px] text-slate-400 font-semibold tracking-wide">منظومة الموارد البشرية وإدارة الرواتب الذكية</p>
+          <p class="hidden md:block text-[11px] text-slate-400 font-medium mt-0.5">منظومة الموارد البشرية وإدارة الرواتب الذكية</p>
         </div>
       </a>
 
       <!-- Quick Actions -->
-      <div class="flex items-center gap-2 sm:gap-3 shrink-0">
+      <div class="flex items-center gap-2.5 sm:gap-3 shrink-0">
         <a href="#registerSection" class="hidden md:inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-800/60 transition-colors">
+          <i class="fa-solid fa-sparkles text-purple-400 text-xs"></i>
           <span>المميزات والاشتراك</span>
         </a>
-        <a href="index.html" class="px-3.5 py-2 sm:px-5 sm:py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs sm:text-sm shadow-md shadow-purple-500/20 flex items-center gap-1.5 sm:gap-2 transition-all active:scale-95 shrink-0">
+        <a href="index.html" class="px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-bold text-xs sm:text-sm shadow-md shadow-purple-500/20 flex items-center gap-2 transition-all active:scale-95 border border-white/10 shrink-0">
           <i class="fa-solid fa-right-to-bracket text-xs"></i>
           <span>دخول النظام</span>
         </a>
@@ -136,40 +144,48 @@
 
       <!-- Hero Header -->
       <div class="text-center space-y-3 sm:space-y-4 max-w-3xl mx-auto px-2">
-        <div class="inline-flex items-center gap-2 px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-bold bg-purple-950/80 text-purple-300 border border-purple-800/60 shadow-inner max-w-full">
-          <span class="w-2 h-2 rounded-full bg-purple-400 animate-ping shrink-0"></span>
-          <span class="truncate sm:whitespace-normal">منظومة متكاملة متعددة المنشآت (Multi-Tenant Cloud HR)</span>
+        <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold bg-gradient-to-r from-purple-500/10 via-indigo-500/10 to-blue-500/10 border border-purple-500/25 text-purple-300 shadow-sm backdrop-blur-md max-w-full">
+          <span class="w-2 h-2 rounded-full bg-purple-400 animate-pulse shrink-0"></span>
+          <span class="sm:hidden">منظومة سحابية متكاملة للمنشآت</span>
+          <span class="hidden sm:inline">منظومة سحابية متكاملة متعددة الشركات • Enterprise Multi-Tenant SaaS</span>
         </div>
-        <h1 class="text-2xl sm:text-4xl lg:text-5xl font-black text-white leading-tight">
-          <span class="block text-slate-200 text-base sm:text-2xl font-bold mb-1">انضم إلى منظومة</span>
-          <span class="inline-block my-1 bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 bg-clip-text text-transparent font-mono tracking-wide text-2xl sm:text-4xl lg:text-5xl" dir="ltr">AE (HR-SYSTEM)</span>
-          <span class="block text-slate-100 text-lg sm:text-3xl font-black mt-1">لإدارة الموارد البشرية والرواتب</span>
+        <h1 class="text-3xl sm:text-5xl lg:text-6xl font-black text-white leading-[1.25] tracking-tight">
+          <span class="block text-slate-300 text-base sm:text-2xl font-bold mb-2">انضم إلى منظومة</span>
+          <span class="inline-block bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 bg-clip-text text-transparent font-mono tracking-wide" dir="ltr">AE HR SYSTEM</span>
+          <span class="block text-slate-100 text-xl sm:text-3xl lg:text-4xl font-black mt-2">لإدارة الموارد البشرية والرواتب الذكية</span>
         </h1>
-        <p class="text-xs sm:text-base text-slate-300 leading-relaxed max-w-2xl mx-auto">
+        <p class="text-xs sm:text-base text-slate-300 leading-relaxed max-w-2xl mx-auto font-normal">
           سجّل شركتك الآن للتمتع بنظام سحابي ذكي للبصمة البيومترية، الحضور الجغرافي (GPS)، وإدارة مسيرات الرواتب المتوافقة مع أنظمة العمل.
         </p>
       </div>
 
       <!-- Registration Form & Success State Card -->
-      <div id="registerSection" class="glass-card rounded-2xl sm:rounded-3xl p-4 sm:p-8 md:p-10 glow-purple max-w-2xl mx-auto border border-purple-500/30 w-full">
+      <div id="registerSection" class="glass-card rounded-2xl sm:rounded-3xl p-5 sm:p-8 md:p-10 glow-purple max-w-2xl mx-auto border border-purple-500/30 w-full relative overflow-hidden">
+        <!-- Top Gradient Highlight Line -->
+        <div class="absolute -top-px left-1/2 -translate-x-1/2 w-3/4 h-[2px] bg-gradient-to-r from-transparent via-purple-500 to-transparent"></div>
         
         <!-- ============================================================ -->
         <!-- 1. FORM STATE: Company Registration Form -->
         <!-- ============================================================ -->
         <form id="companyRegistrationForm" class="space-y-5 sm:space-y-6">
-          <div class="border-b border-slate-800 pb-4 flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h2 class="text-base sm:text-xl font-black text-white flex items-center gap-2">
-                <i class="fa-solid fa-building-circle-check text-purple-400 text-sm sm:text-base"></i>
-                <span>طلب تسجيل منشأة جديدة</span>
-              </h2>
-              <p class="text-[11px] sm:text-xs text-slate-400 mt-1">أدخل بيانات الشركة وحساب المدير المعتمد للبدء</p>
+          <div class="border-b border-slate-800/80 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center text-lg shrink-0">
+                <i class="fa-solid fa-building-circle-check"></i>
+              </div>
+              <div>
+                <h2 class="text-base sm:text-lg font-black text-white">طلب تسجيل منشأة جديدة</h2>
+                <p class="text-[11px] sm:text-xs text-slate-400 mt-0.5">أدخل بيانات الشركة وحساب المدير المعتمد للبدء</p>
+              </div>
             </div>
-            <span class="px-2.5 py-1 rounded-full text-[10px] sm:text-[11px] font-bold bg-purple-900/40 text-purple-300 border border-purple-700/40 shrink-0">خطوة واحدة فقط</span>
+            <span class="px-3 py-1 rounded-full text-[11px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1.5 shrink-0 self-start sm:self-auto">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span>خطوة واحدة للبدء</span>
+            </span>
           </div>
 
           <!-- Inline Error Banner -->
-          <div id="regErrorBanner" class="hidden p-3 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-300 text-xs font-bold flex items-center gap-2.5">
+          <div id="regErrorBanner" class="hidden p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-bold flex items-center gap-2.5">
             <i class="fa-solid fa-triangle-exclamation text-rose-400 text-sm shrink-0"></i>
             <span id="regErrorText"></span>
           </div>
@@ -181,20 +197,20 @@
               <label for="companyName" class="block text-xs font-bold text-slate-200 mb-1.5">
                 اسم الشركة أو المنشأة الرسمي <span class="text-rose-400">*</span>
               </label>
-              <div class="relative">
-                <i class="fa-solid fa-building absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
-                <input type="text" id="companyName" required placeholder="مثال: شركة الأفق لتقنية المعلومات" class="w-full pr-10 pl-3.5 py-2.5 rounded-xl text-xs sm:text-sm bg-slate-900/90 text-white border border-slate-700 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/30 transition-all font-bold placeholder:text-slate-500">
+              <div class="relative group">
+                <i class="fa-solid fa-building absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs group-focus-within:text-purple-400 transition-colors"></i>
+                <input type="text" id="companyName" required placeholder="شركة الأفق لتقنية المعلومات والحلول الذكية" class="w-full pr-10 pl-3.5 py-2.5 rounded-xl text-xs sm:text-sm bg-slate-900/90 text-white border border-slate-700/80 focus:border-purple-500 focus:bg-slate-900 focus:ring-4 focus:ring-purple-500/15 transition-all font-bold placeholder:text-slate-500">
               </div>
             </div>
 
             <!-- Tax Number -->
             <div>
               <label for="taxNumber" class="block text-xs font-bold text-slate-200 mb-1.5">
-                الرقم الضريبي أو السجل التجاري <span class="text-slate-400 text-[10px]">(اختياري)</span>
+                الرقم الضريبي أو السجل التجاري <span class="text-slate-400 text-[10px] font-normal">(اختياري)</span>
               </label>
-              <div class="relative">
-                <i class="fa-solid fa-file-invoice absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
-                <input type="text" id="taxNumber" placeholder="مثال: 123-456-789" class="w-full pr-10 pl-3.5 py-2.5 rounded-xl text-xs sm:text-sm bg-slate-900/90 text-white border border-slate-700 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/30 transition-all font-mono font-medium placeholder:text-slate-500">
+              <div class="relative group">
+                <i class="fa-solid fa-file-invoice absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs group-focus-within:text-purple-400 transition-colors"></i>
+                <input type="text" id="taxNumber" placeholder="300123456700003" class="w-full pr-10 pl-3.5 py-2.5 rounded-xl text-xs sm:text-sm bg-slate-900/90 text-white border border-slate-700/80 focus:border-purple-500 focus:bg-slate-900 focus:ring-4 focus:ring-purple-500/15 transition-all font-mono placeholder:text-slate-500 text-right" dir="ltr">
               </div>
             </div>
 
@@ -203,9 +219,9 @@
               <label for="managerName" class="block text-xs font-bold text-slate-200 mb-1.5">
                 اسم المدير المسؤول (Admin) <span class="text-rose-400">*</span>
               </label>
-              <div class="relative">
-                <i class="fa-solid fa-user-tie absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
-                <input type="text" id="managerName" required placeholder="مثال: م. أحمد عبد الله" class="w-full pr-10 pl-3.5 py-2.5 rounded-xl text-xs sm:text-sm bg-slate-900/90 text-white border border-slate-700 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/30 transition-all font-bold placeholder:text-slate-500">
+              <div class="relative group">
+                <i class="fa-solid fa-user-tie absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs group-focus-within:text-purple-400 transition-colors"></i>
+                <input type="text" id="managerName" required placeholder="م. أحمد عبد الله" class="w-full pr-10 pl-3.5 py-2.5 rounded-xl text-xs sm:text-sm bg-slate-900/90 text-white border border-slate-700/80 focus:border-purple-500 focus:bg-slate-900 focus:ring-4 focus:ring-purple-500/15 transition-all font-bold placeholder:text-slate-500">
               </div>
             </div>
 
@@ -214,9 +230,9 @@
               <label for="email" class="block text-xs font-bold text-slate-200 mb-1.5">
                 البريد الإلكتروني الرسمي للمدير <span class="text-rose-400">*</span>
               </label>
-              <div class="relative">
-                <i class="fa-solid fa-envelope absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
-                <input type="email" id="email" required placeholder="manager@company.com" class="w-full pr-10 pl-3.5 py-2.5 rounded-xl text-xs sm:text-sm bg-slate-900/90 text-white border border-slate-700 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/30 transition-all font-mono placeholder:text-slate-500">
+              <div class="relative group">
+                <i class="fa-solid fa-envelope absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs group-focus-within:text-purple-400 transition-colors"></i>
+                <input type="email" id="email" required placeholder="manager@company.com" class="w-full pr-10 pl-3.5 py-2.5 rounded-xl text-xs sm:text-sm bg-slate-900/90 text-white border border-slate-700/80 focus:border-purple-500 focus:bg-slate-900 focus:ring-4 focus:ring-purple-500/15 transition-all font-mono placeholder:text-slate-500 text-right" dir="ltr">
               </div>
             </div>
 
@@ -225,9 +241,9 @@
               <label for="phone" class="block text-xs font-bold text-slate-200 mb-1.5">
                 رقم هاتف التواصل والواتساب <span class="text-rose-400">*</span>
               </label>
-              <div class="relative">
-                <i class="fa-solid fa-phone absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
-                <input type="tel" id="phone" required placeholder="مثال: 01012345678" class="w-full pr-10 pl-3.5 py-2.5 rounded-xl text-xs sm:text-sm bg-slate-900/90 text-white border border-slate-700 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/30 transition-all font-mono placeholder:text-slate-500">
+              <div class="relative group">
+                <i class="fa-solid fa-phone absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs group-focus-within:text-purple-400 transition-colors"></i>
+                <input type="tel" id="phone" required placeholder="01012345678" class="w-full pr-10 pl-3.5 py-2.5 rounded-xl text-xs sm:text-sm bg-slate-900/90 text-white border border-slate-700/80 focus:border-purple-500 focus:bg-slate-900 focus:ring-4 focus:ring-purple-500/15 transition-all font-mono placeholder:text-slate-500 text-right" dir="ltr">
               </div>
             </div>
 
@@ -236,25 +252,38 @@
               <label for="pin" class="block text-xs font-bold text-slate-200 mb-1.5">
                 رمز PIN السري لدخول المدير (6 أرقام غير مكررة) <span class="text-rose-400">*</span>
               </label>
-              <div class="relative">
-                <i class="fa-solid fa-key absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
-                <input type="password" id="pin" required maxlength="6" minlength="6" pattern="[0-9]{6}" inputmode="numeric" placeholder="مثال: 852963" class="w-full pr-10 pl-3.5 py-2.5 rounded-xl text-xs sm:text-sm bg-slate-900/90 text-white border border-slate-700 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/30 transition-all font-mono text-center tracking-widest text-base font-bold placeholder:text-slate-500">
+              <div class="relative group">
+                <i class="fa-solid fa-key absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs group-focus-within:text-purple-400 transition-colors"></i>
+                <input type="password" id="pin" required maxlength="6" minlength="6" pattern="[0-9]{6}" inputmode="numeric" placeholder="••••••" class="w-full pr-10 pl-3.5 py-2.5 rounded-xl text-xs sm:text-sm bg-slate-900/90 text-white border border-slate-700/80 focus:border-purple-500 focus:bg-slate-900 focus:ring-4 focus:ring-purple-500/15 transition-all font-mono text-center tracking-[0.4em] text-base font-bold placeholder:text-slate-600">
               </div>
-              <p class="text-[11px] text-slate-400 mt-1">يُستخدم هذا الرمز السري لتسجيل دخول المدير عبر بوابة البصمة ورمز الـ PIN السريع (يجب أن يكون فريداً وغير مستخدم بالنظام).</p>
+              <p class="text-[11px] text-slate-400 mt-1.5 flex items-center gap-1.5">
+                <i class="fa-solid fa-shield-halved text-purple-400 text-[10px]"></i>
+                <span>يُستخدم هذا الرمز السري لتسجيل دخول المدير عبر بوابة البصمة ورمز الـ PIN المباشر.</span>
+              </p>
             </div>
 
           </div>
 
           <!-- Submit Button -->
           <div class="pt-2">
-            <button type="submit" class="w-full py-3.5 px-6 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-700 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-sm sm:text-base shadow-xl shadow-purple-600/30 flex items-center justify-center gap-2.5 transition-all active:scale-98">
+            <button type="submit" class="w-full py-3.5 px-6 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-black text-sm sm:text-base shadow-xl shadow-purple-600/30 flex items-center justify-center gap-2.5 transition-all hover:shadow-purple-500/40 active:scale-[0.99] border border-white/10">
               <i class="fa-solid fa-rocket"></i>
-              <span>تسجيل الشركة وبدء الاستخدام</span>
+              <span>تسجيل المنشأة وتفعيل النظام</span>
+              <i class="fa-solid fa-arrow-left text-xs opacity-75 mr-1"></i>
             </button>
           </div>
 
-          <div class="text-center text-xs text-slate-400">
-            بالتسجيل، أنت توافق على شروط الخدمة وسياسة الخصوصية الخاصة بنظام AE (HR-SYSTEM) السحابي.
+          <!-- Trust Badges & Micro-Copy -->
+          <div class="pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-center gap-3 sm:gap-4 text-xs text-slate-400">
+            <span class="flex items-center gap-1.5"><i class="fa-solid fa-shield-halved text-emerald-400 text-xs"></i> عزل سحابي مستقل (Isolated Tenant)</span>
+            <span class="text-slate-700">•</span>
+            <span class="flex items-center gap-1.5"><i class="fa-solid fa-lock text-cyan-400 text-xs"></i> تشفير 256-bit آمن</span>
+            <span class="text-slate-700">•</span>
+            <span class="flex items-center gap-1.5"><i class="fa-solid fa-bolt text-amber-400 text-xs"></i> جاهز للاستخدام الفوري</span>
+          </div>
+
+          <div class="text-center text-[11px] text-slate-500">
+            بالتسجيل، أنت توافق على شروط الخدمة وسياسة الخصوصية الخاصة بنظام AE HR SYSTEM السحابي.
           </div>
         </form>
 
@@ -298,29 +327,29 @@
       </div>
 
       <!-- Feature Badges Grid -->
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-6">
-        <div class="glass-card rounded-2xl p-4 sm:p-5 text-center space-y-2 border border-slate-800">
-          <div class="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center mx-auto text-lg">
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-5 pt-6">
+        <div class="glass-card rounded-2xl p-5 sm:p-6 text-center space-y-3 border border-slate-800/90 hover:border-purple-500/30 hover:-translate-y-1 transition-all duration-300 shadow-lg">
+          <div class="w-12 h-12 rounded-2xl bg-purple-500/10 text-purple-400 border border-purple-500/20 flex items-center justify-center mx-auto text-xl shadow-inner">
             <i class="fa-solid fa-shield-halved"></i>
           </div>
-          <h4 class="text-xs sm:text-sm font-bold text-white">عزل بيانات كامل (Multi-Tenant)</h4>
-          <p class="text-[11px] text-slate-400">بيانات شركتك وموظفيك مشفرة ومستقلة تماماً في قاعدة بيانات سحابية آمنة.</p>
+          <h4 class="text-sm sm:text-base font-bold text-white">عزل بيانات كامل (Multi-Tenant)</h4>
+          <p class="text-xs text-slate-400 leading-relaxed">بيانات شركتك وموظفيك مشفرة ومستقلة تماماً في قاعدة بيانات سحابية آمنة.</p>
         </div>
 
-        <div class="glass-card rounded-2xl p-4 sm:p-5 text-center space-y-2 border border-slate-800">
-          <div class="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center mx-auto text-lg">
+        <div class="glass-card rounded-2xl p-5 sm:p-6 text-center space-y-3 border border-slate-800/90 hover:border-blue-500/30 hover:-translate-y-1 transition-all duration-300 shadow-lg">
+          <div class="w-12 h-12 rounded-2xl bg-blue-500/10 text-blue-400 border border-blue-500/20 flex items-center justify-center mx-auto text-xl shadow-inner">
             <i class="fa-solid fa-map-location-dot"></i>
           </div>
-          <h4 class="text-xs sm:text-sm font-bold text-white">تحكم جغرافي وبصمة ذكية</h4>
-          <p class="text-[11px] text-slate-400">إثبات حضور الموظفين عبر الموقع الجغرافي (GPS Geofence) أو رمز الـ PIN المباشر.</p>
+          <h4 class="text-sm sm:text-base font-bold text-white">تحكم جغرافي وبصمة ذكية</h4>
+          <p class="text-xs text-slate-400 leading-relaxed">إثبات حضور الموظفين عبر الموقع الجغرافي (GPS Geofence) أو رمز الـ PIN المباشر.</p>
         </div>
 
-        <div class="glass-card rounded-2xl p-4 sm:p-5 text-center space-y-2 border border-slate-800">
-          <div class="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center mx-auto text-lg">
+        <div class="glass-card rounded-2xl p-5 sm:p-6 text-center space-y-3 border border-slate-800/90 hover:border-emerald-500/30 hover:-translate-y-1 transition-all duration-300 shadow-lg">
+          <div class="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center mx-auto text-xl shadow-inner">
             <i class="fa-solid fa-calculator"></i>
           </div>
-          <h4 class="text-xs sm:text-sm font-bold text-white">مسيرات رواتب تلقائية</h4>
-          <p class="text-[11px] text-slate-400">احتساب فوري للتأخيرات والغياب والإضافي والتأمينات وفقاً لقوانين العمل الرسمية.</p>
+          <h4 class="text-sm sm:text-base font-bold text-white">مسيرات رواتب تلقائية</h4>
+          <p class="text-xs text-slate-400 leading-relaxed">احتساب فوري للتأخيرات والغياب والإضافي والتأمينات وفقاً لقوانين العمل الرسمية.</p>
         </div>
       </div>
 
@@ -328,14 +357,14 @@
   </main>
 
   <!-- Footer -->
-  <footer class="border-t border-slate-800/80 bg-slate-950/90 py-6 text-center text-xs text-slate-500 w-full overflow-hidden">
+  <footer class="border-t border-slate-800/80 bg-slate-950/90 py-6 text-center text-xs text-slate-500 w-full overflow-hidden mt-12">
     <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-right">
       <div class="flex items-center justify-center gap-2">
         <img src="icon.svg" alt="AE" class="w-5 h-5 rounded">
-        <span>منظومة <span dir="ltr" class="inline-block font-mono font-bold">AE (HR-SYSTEM)</span> لإدارة الموارد البشرية والرواتب &copy; 2026. كافة الحقوق محفوظة.</span>
+        <span>منظومة <span dir="ltr" class="inline-block font-mono font-bold text-slate-300">AE HR SYSTEM</span> لإدارة الموارد البشرية والرواتب &copy; 2026. كافة الحقوق محفوظة.</span>
       </div>
       <div class="flex items-center justify-center gap-2">
-        <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+        <span class="w-2 h-2 rounded-full bg-emerald-500 badge-live-pulse"></span>
         <span class="text-slate-400 font-mono">Cloud Multi-Tenant SaaS v2.4</span>
       </div>
     </div>
@@ -391,7 +420,6 @@
         }
 
         try {
-          // استدعاء مباشر لدالة الـ API الخاصة بنا
           const res = await ApiService.registerNewTenant({
               companyName: companyName,
               taxNumber: taxNumber,
