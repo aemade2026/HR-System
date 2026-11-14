@@ -28,6 +28,40 @@
 const USE_BACKEND_API = false;
 const BACKEND_BASE_URL = 'http://localhost:8000/api/v1';
 
+// Avatar Presets for Male and Female
+const DEFAULT_AVATARS = {
+  male: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
+  female: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80'
+};
+
+function detectGender(fullName) {
+  if (!fullName) return 'male';
+  const name = String(fullName).trim();
+  if (/^(مهندسة|دكتورة|أستاذة|مدام|آنسة|سيدة|م\/|د\/)\s/i.test(name)) return 'female';
+  if (/^(مهندس|دكتور|أستاذ|سيد|م\.|د\.)\s/i.test(name) && !/(سارة|مريم|فاطمة|نور)/i.test(name)) return 'male';
+
+  const parts = name.replace(/^(م\.|م\/|د\.|د\/|مهندس|مهندسة|أستاذ|أستاذة)\s+/i, '').trim().split(/\s+/);
+  const firstName = parts[0] || '';
+
+  const femaleNames = new Set([
+    'فاطمة', 'فاطمه', 'مريم', 'سارة', 'ساره', 'نور', 'نورهان', 'نورا', 'ياسمين', 'هدى', 'منى', 
+    'رانيا', 'داليا', 'أسماء', 'اسماء', 'شيرين', 'دينا', 'إيمان', 'ايمان', 'رحاب', 'آية', 'اية', 
+    'بسمة', 'بسمه', 'سلمى', 'سلمي', 'هدير', 'رنا', 'نهى', 'نهي', 'رضوى', 'رضوي', 'أميرة', 'اميرة', 
+    'اميره', 'أميره', 'هناء', 'نجلاء', 'مروة', 'مروه', 'ندى', 'ندي', 'ريم', 'خلود', 'عائشة', 
+    'عائشه', 'خديجة', 'خديجه', 'زينب', 'فريدة', 'فريده', 'حبيبة', 'حبيبه', 'شهد', 'جنا', 'جنى', 
+    'ملك', 'روان', 'آلاء', 'الاء', 'إسراء', 'اسراء', 'منار', 'يارا', 'هاجر', 'ميار', 'شروق', 
+    'أروى', 'اروى', 'لمياء', 'صفاء', 'وفاء', 'ولاء', 'غادة', 'غاده', 'لبنى', 'لبني', 'عبير', 
+    'هبة', 'هبه', 'رشا', 'سامية', 'ساميه', 'سحر', 'سهير', 'ماجدة', 'ماجده', 'نادية', 'ناديه'
+  ]);
+
+  if (femaleNames.has(firstName)) return 'female';
+  if (firstName.endsWith('ة') || (firstName.endsWith('اء') && firstName.length > 3)) {
+    const maleWithTa = new Set(['أسامة', 'اسامة', 'اسامه', 'أسامه', 'حمزة', 'حمزه', 'طلحة', 'طلحه', 'عبيدة', 'عبيده', 'عنترة', 'عنتره', 'قتادة', 'عكرمة']);
+    if (!maleWithTa.has(firstName)) return 'female';
+  }
+  return 'male';
+}
+
 // Initial Mock Dataset for First-Time Setup
 const INITIAL_DATABASE = {
   settings: {
@@ -527,7 +561,8 @@ const INITIAL_DATABASE = {
       fullName: 'م. أحمد عماد',
       first_name: 'Ahmed',
       last_name: 'Emad',
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+      gender: 'male',
+      avatar: DEFAULT_AVATARS.male,
       department: 'تقنية المعلومات',
       jobTitle: 'مبرمج ومطور برمجيات (Super Admin)',
       hireDate: '2022-01-01',
@@ -843,10 +878,12 @@ class LocalDatabase {
             prog.last_name = 'Emad';
             prog.email = 'aemade2016@gmail.com';
             prog.role = 'programmer';
+            prog.gender = 'male';
+            prog.avatar = DEFAULT_AVATARS.male;
             prog.department = 'تقنية المعلومات';
             prog.jobTitle = 'مبرمج ومطور برمجيات (Super Admin)';
             prog.status = 'active';
-            prog.pin = '050298';
+            if (!prog.pin) prog.pin = '050298';
             prog.baseSalary = 25000;
             needsSave = true;
           } else {
@@ -862,6 +899,8 @@ class LocalDatabase {
               employee_code: 'EMP-1001',
               company_id: '55555555-4444-3333-2222-111111111111',
               fullName: 'احمد عماد الدين',
+              gender: 'male',
+              avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
               department: 'المبيعات والتسويق',
               jobTitle: 'أخصائي المبيعات والتسويق',
               phone: '01123245614',
@@ -886,10 +925,35 @@ class LocalDatabase {
             cand.id = 'EMP-1001';
             cand.employee_code = 'EMP-1001';
             cand.role = 'employee';
+            cand.gender = 'male';
+            if (!cand.avatar || cand.avatar.includes('photo-1534528741775-53994a69daeb')) {
+              cand.avatar = 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80';
+            }
             cand.status = 'active';
             cand.department = 'المبيعات والتسويق';
             cand.jobTitle = cand.jobTitle || 'أخصائي المبيعات والتسويق';
             cand.baseSalary = cand.baseSalary || 7500;
+          }
+
+          // تسوية ومزامنة الصور الشخصية بناءً على جنس الموظف (ذكر / أنثى) لجميع الموظفين
+          if (Array.isArray(parsed.employees)) {
+            parsed.employees.forEach(e => {
+              if (!e.gender) {
+                e.gender = detectGender(e.fullName || e.name);
+                needsSave = true;
+              }
+              if (e.gender === 'male') {
+                if (!e.avatar || e.avatar.includes('photo-1534528741775-53994a69daeb')) {
+                  e.avatar = DEFAULT_AVATARS.male;
+                  needsSave = true;
+                }
+              } else if (e.gender === 'female') {
+                if (!e.avatar || e.avatar.includes('photo-1507003211169') || e.avatar.includes('photo-1535713875002') || e.avatar.includes('photo-1500648767791')) {
+                  e.avatar = DEFAULT_AVATARS.female;
+                  needsSave = true;
+                }
+              }
+            });
           }
 
           // تصفير الجداول والعمليات الحسابية
@@ -1125,7 +1189,14 @@ class ApiService {
       fullName: isProg ? 'م. أحمد عماد' : fullName,
       first_name: isProg ? 'Ahmed' : (emp.first_name || fullName.split(' ')[0] || ''),
       last_name: isProg ? 'Emad' : (emp.last_name || fullName.split(' ').slice(1).join(' ') || ''),
-      avatar: emp.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+      gender: emp.gender || detectGender(isProg ? 'م. أحمد عماد' : fullName),
+      avatar: (() => {
+        const g = emp.gender || detectGender(isProg ? 'م. أحمد عماد' : fullName);
+        if (emp.avatar && !(g === 'male' && emp.avatar.includes('photo-1534528741775-53994a69daeb'))) {
+          return emp.avatar;
+        }
+        return g === 'female' ? DEFAULT_AVATARS.female : DEFAULT_AVATARS.male;
+      })(),
       department: isProg ? 'تقنية المعلومات' : (emp.department || 'العمليات والتشغيل'),
       jobTitle: isProg ? 'مبرمج ومطور برمجيات (Super Admin)' : (emp.jobTitle || emp.job_title || 'موظف'),
       hireDate: emp.hireDate || emp.hire_date || new Date().toISOString().split('T')[0],
@@ -1658,9 +1729,10 @@ class ApiService {
    * @param {string} pin
    * @param {string|null} [excludeEmployeeId=null]
    * @param {string|null} [excludeCompanyId=null]
+   * @param {string|null} [excludeEmail=null]
    * @returns {Promise<boolean>}
    */
-  static async isPinTaken(pin, excludeEmployeeId = null, excludeCompanyId = null) {
+  static async isPinTaken(pin, excludeEmployeeId = null, excludeCompanyId = null, excludeEmail = null) {
     if (!pin) return false;
     const cleanPin = String(pin).trim();
     if (!cleanPin) return false;
@@ -1669,9 +1741,17 @@ class ApiService {
     if (supabase) {
       try {
         // فحص جدول الموظفين
-        let empQuery = supabase.from('employees').select('id, employee_code, pin').eq('pin', cleanPin);
+        let empQuery = supabase.from('employees').select('id, employee_code, pin, email').eq('pin', cleanPin);
         if (excludeEmployeeId) {
-          empQuery = empQuery.neq('id', excludeEmployeeId).neq('employee_code', excludeEmployeeId);
+          const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(excludeEmployeeId);
+          if (isUUID) {
+            empQuery = empQuery.neq('id', excludeEmployeeId);
+          } else {
+            empQuery = empQuery.neq('employee_code', excludeEmployeeId);
+          }
+        }
+        if (excludeEmail) {
+          empQuery = empQuery.neq('email', excludeEmail);
         }
         const { data: emps, error: empErr } = await empQuery.limit(1);
         if (!empErr && Array.isArray(emps) && emps.length > 0) {
@@ -1698,13 +1778,14 @@ class ApiService {
     // فحص الموظفين المحليين
     const isEmpMatch = (db.employees || []).some(e => {
       if (excludeEmployeeId && (e.id === excludeEmployeeId || e.employee_code === excludeEmployeeId)) return false;
+      if (excludeEmail && e.email && e.email.toLowerCase() === excludeEmail.toLowerCase()) return false;
       return String(e.pin || '').trim() === cleanPin;
     });
     if (isEmpMatch) return true;
 
     // فحص الشركات المحلية
     const isCompMatch = (db.companies || []).some(c => {
-      if (excludeCompanyId && c.id === excludeCompanyId) return false;
+      if (excludeCompanyId && (c.id === excludeCompanyId || c.company_id === excludeCompanyId)) return false;
       const cPin = String(c.pin || c.manager_pin || '').trim();
       return cPin === cleanPin;
     });
@@ -1849,13 +1930,15 @@ class ApiService {
 
       const fullName = `${onboardingData.firstName || ''} ${onboardingData.secondName || ''} ${onboardingData.lastName || ''}`.trim();
 
+      const gender = onboardingData.gender || detectGender(fullName);
       const newEmp = {
         id: newId,
         company_id: companyId,
         company_name: companyName,
         companyName: companyName,
         fullName: fullName || 'موظف جديد',
-        avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+        gender: gender,
+        avatar: gender === 'female' ? DEFAULT_AVATARS.female : DEFAULT_AVATARS.male,
         department: onboardingData.department || 'العمليات والتشغيل',
         jobTitle: onboardingData.jobTitle || 'موظف جديد (قيد التعيين)',
         hireDate: new Date().toISOString().split('T')[0],
@@ -2640,27 +2723,37 @@ class ApiService {
 
           if (data && !error && data.length > 0) {
             tenants = data.map(d => {
-              let mName = d.manager_name || d.managerName || '';
-              if (!mName || mName.includes('?') || mName.includes('')) {
-                mName = (d.pin === '050298' || d.email === 'aemade2016@gmail.com' || d.id === '11111111-2222-3333-4444-555555555555') ? 'م. أحمد عماد' : 'المدير العام';
+              let mName = (d.manager_name || d.managerName || '').trim();
+              if (d.id === '11111111-2222-3333-4444-555555555555' || d.pin === '050298') {
+                if (!mName || mName.includes('?') || /\uFFFD/.test(mName)) {
+                  mName = 'م. أحمد عماد';
+                }
+              } else if (!mName || /\?{2,}/.test(mName)) {
+                mName = 'المدير العام';
               }
-              let cName = d.name || d.company_name || d.companyName || '';
-              if (!cName || cName.includes('?') || cName.includes('')) {
-                cName = 'AE (HR-SYSTEM)';
+
+              let cName = (d.name || d.company_name || d.companyName || '').trim();
+              if (d.id === '11111111-2222-3333-4444-555555555555') {
+                if (!cName || cName.includes('?') || /\uFFFD/.test(cName)) {
+                  cName = 'AE (HR-SYSTEM)';
+                }
+              } else if (!cName || /\?{2,}/.test(cName)) {
+                cName = 'شركة جديدة';
               }
+
               return {
                 id: d.id,
                 company_id: d.id,
                 companyName: cName,
                 name: cName,
-                taxNumber: d.tax_number ?? d.taxNumber ?? '492-710-853',
-                tax_number: d.tax_number ?? d.taxNumber ?? '492-710-853',
+                taxNumber: d.tax_number ?? d.taxNumber ?? 'غير مسجل',
+                tax_number: d.tax_number ?? d.taxNumber ?? 'غير مسجل',
                 managerName: mName,
                 manager_name: mName,
-                phone: d.manager_phone || d.phone || '01008074308',
-                email: d.manager_email || d.email || 'aemade2016@gmail.com',
-                pin: d.manager_pin || d.pin || '050298',
-                status: d.status || 'active',
+                phone: d.manager_phone || d.phone || '',
+                email: d.manager_email || d.email || '',
+                pin: d.manager_pin || d.pin || '',
+                status: d.status || 'pending',
                 createdAt: d.created_at || d.createdAt || new Date().toISOString()
               };
             });
@@ -2688,15 +2781,17 @@ class ApiService {
         });
       }
 
-      // تنظيف وتصحيح أي ترميز تالف في أسماء المديرين أو الشركات لضمان عدم ظهور ????
+      // تنظيف وتصحيح أي ترميز تالف في الشركة الافتراضية الأصلية فقط
       tenants.forEach(t => {
-        if (!t.managerName || t.managerName.includes('?') || t.managerName.includes('')) {
-          t.managerName = (t.pin === '050298' || t.email === 'aemade2016@gmail.com' || t.id === '11111111-2222-3333-4444-555555555555') ? 'م. أحمد عماد' : 'المدير العام';
-          t.manager_name = t.managerName;
-        }
-        if (!t.companyName || t.companyName.includes('?') || t.companyName.includes('')) {
-          t.companyName = 'AE (HR-SYSTEM)';
-          t.name = 'AE (HR-SYSTEM)';
+        if (t.id === '11111111-2222-3333-4444-555555555555' || t.pin === '050298') {
+          if (!t.managerName || t.managerName.includes('?') || /\uFFFD/.test(t.managerName)) {
+            t.managerName = 'م. أحمد عماد';
+            t.manager_name = 'م. أحمد عماد';
+          }
+          if (!t.companyName || t.companyName.includes('?') || /\uFFFD/.test(t.companyName)) {
+            t.companyName = 'AE (HR-SYSTEM)';
+            t.name = 'AE (HR-SYSTEM)';
+          }
         }
       });
 
@@ -3832,8 +3927,19 @@ class ApiService {
   static async createEmployee(empData, signal = null) {
     try {
       await this.simulateDelay(100, signal);
-      const companyId = this.getCurrentCompanyId();
+      const companyId = empData.company_id || empData.companyId || this.getCurrentCompanyId();
       const db = LocalDatabase.getDB();
+
+      // التحقق الأمني: رتبة مبرمج النظام محصورة فقط للمبرمج Super Admin
+      if (empData.role === 'programmer') {
+        const actor = AuditMiddleware.getCurrentActor();
+        const curRole = actor?.role || 'employee';
+        if (curRole !== 'programmer') {
+          return this.#createEnvelope(false, null, 'صلاحية مرفوضة: لا يمكن تعيين رتبة مبرمج إلا من قبل المبرمج نفسه (Super Admin)', {
+            message: 'صلاحية مرفوضة: لا يمكن تعيين رتبة مبرمج إلا من قبل المبرمج نفسه (Super Admin)'
+          });
+        }
+      }
 
       if (empData.pin) {
         const pinTaken = await this.isPinTaken(empData.pin);
@@ -3897,12 +4003,49 @@ class ApiService {
       const safeFields = { ...updatedFields };
       delete safeFields.company_id; // حماية عزل المستأجر
 
-      if (safeFields.pin) {
-        const pinTaken = await this.isPinTaken(safeFields.pin, id);
-        if (pinTaken) {
-          return this.#createEnvelope(false, null, 'رمز الـ PIN المدخل مستخدم بالفعل لموظف أو مسؤول آخر بالنظام! يرجى اختيار رمز مختلف.', {
-            message: 'رمز الـ PIN المدخل مستخدم بالفعل لموظف أو مسؤول آخر بالنظام! يرجى اختيار رمز مختلف.'
+      // التحقق الأمني: لا يسمح بترقية أي حساب إلى رتبة مبرمج إلا من قبل المبرمج نفسه
+      if (safeFields.role === 'programmer') {
+        const actor = AuditMiddleware.getCurrentActor();
+        const curRole = actor?.role || 'employee';
+        if (curRole !== 'programmer') {
+          return this.#createEnvelope(false, null, 'صلاحية مرفوضة: لا يمكن ترقية أي حساب إلى رتبة مبرمج إلا من قبل المبرمج نفسه (Super Admin)', {
+            message: 'صلاحية مرفوضة: لا يمكن ترقية أي حساب إلى رتبة مبرمج إلا من قبل المبرمج نفسه (Super Admin)'
           });
+        }
+      }
+
+      if (safeFields.gender) {
+        if (!safeFields.avatar) {
+          safeFields.avatar = safeFields.gender === 'female' ? DEFAULT_AVATARS.female : DEFAULT_AVATARS.male;
+        }
+      } else if (safeFields.fullName && !safeFields.avatar) {
+        const g = detectGender(safeFields.fullName);
+        safeFields.gender = g;
+        safeFields.avatar = g === 'female' ? DEFAULT_AVATARS.female : DEFAULT_AVATARS.male;
+      }
+
+      // البحث عن الموظف الحالي في قاعدة البيانات المحلية لتحديد بياناته وهويته بدقة
+      const currentEmp = (db.employees || []).find(e => 
+        e.id === id || 
+        e.employee_code === id || 
+        (safeFields.email && e.email && e.email.toLowerCase() === String(safeFields.email).toLowerCase())
+      );
+
+      if (safeFields.pin) {
+        const cleanNewPin = String(safeFields.pin).trim();
+        const currentPin = currentEmp ? String(currentEmp.pin || '').trim() : null;
+
+        // إذا لم يتغير الرمز السري عن الرمز الحالي للموظف نفسه، نتجاوز الفحص تماماً لتفادي الخطأ الزائف
+        if (currentPin !== cleanNewPin) {
+          const excludeEmpId = currentEmp?.id || id;
+          const excludeCompId = currentEmp?.company_id || companyId;
+          const excludeEmail = currentEmp?.email || safeFields.email || null;
+          const pinTaken = await this.isPinTaken(cleanNewPin, excludeEmpId, excludeCompId, excludeEmail);
+          if (pinTaken) {
+            return this.#createEnvelope(false, null, 'رمز الـ PIN المدخل مستخدم بالفعل لموظف أو مسؤول آخر بالنظام! يرجى اختيار رمز مختلف.', {
+              message: 'رمز الـ PIN المدخل مستخدم بالفعل لموظف أو مسؤول آخر بالنظام! يرجى اختيار رمز مختلف.'
+            });
+          }
         }
       }
 
@@ -3925,11 +4068,14 @@ class ApiService {
           }
 
           if (Object.keys(sbUpdate).length > 0) {
-            await supabase
-              .from('employees')
-              .update(sbUpdate)
-              .eq('id', id)
-              .eq('company_id', companyId);
+            let supQuery = supabase.from('employees').update(sbUpdate);
+            const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+            if (isUUID) {
+              supQuery = supQuery.eq('id', id);
+            } else {
+              supQuery = supQuery.or(`id.eq.${id},employee_code.eq.${id}`);
+            }
+            await supQuery.eq('company_id', companyId);
           }
         } catch (sbErr) {
           console.warn('[Supabase updateEmployee Fallback]:', sbErr);
@@ -3937,7 +4083,11 @@ class ApiService {
       }
 
       // 2. التحديث في LocalDatabase
-      const idx = (db.employees || []).findIndex(e => e.id === id || e.employee_code === id);
+      const idx = (db.employees || []).findIndex(e => 
+        e.id === id || 
+        e.employee_code === id || 
+        (currentEmp && (e.id === currentEmp.id || e.employee_code === currentEmp.employee_code))
+      );
       if (idx !== -1) {
         db.employees[idx] = { ...db.employees[idx], ...safeFields };
         LocalDatabase.saveDB(db);
@@ -3956,6 +4106,88 @@ class ApiService {
       return this.#createEnvelope(true, cloneData(updatedEmp), null, { message: 'تم تحديث بيانات الموظف بنجاح' });
     } catch (err) {
       return this.#handleError(err, 'فشل في تحديث بيانات الموظف');
+    }
+  }
+
+  /**
+   * تغيير رمز PIN السري للموظف بواسطة الموظف نفسه مع التحقق الأمني
+   * @param {string} employeeId 
+   * @param {string} oldPin 
+   * @param {string} newPin 
+   */
+  static async changeEmployeePin(employeeId, oldPin, newPin) {
+    try {
+      await this.simulateDelay(100);
+      const cleanOldPin = String(oldPin || '').trim();
+      const cleanNewPin = String(newPin || '').trim();
+
+      if (!cleanNewPin || !/^\d{6}$/.test(cleanNewPin)) {
+        return this.#createEnvelope(false, null, 'يجب أن يتكون رمز PIN الجديد من 6 أرقام تماماً');
+      }
+
+      if (cleanNewPin === cleanOldPin) {
+        return this.#createEnvelope(false, null, 'رمز PIN الجديد يجب أن يكون مختلفاً عن الرمز القديم');
+      }
+
+      const db = LocalDatabase.getDB();
+      const emp = (db.employees || []).find(e => e.id === employeeId || e.employee_code === employeeId);
+      if (!emp) {
+        return this.#createEnvelope(false, null, 'لم يتم العثور على بيانات الموظف في النظام');
+      }
+
+      // التحقق من صحة الرمز القديم
+      const expectedOldPin = String(emp.pin || '').trim();
+      if (expectedOldPin && expectedOldPin !== cleanOldPin) {
+        return this.#createEnvelope(false, null, 'رمز PIN الحالي غير صحيح! يرجى التأكد من الرمز والمحاولة ثانيةً');
+      }
+
+      // فحص عدم استخدام الرمز الجديد لحساب آخر
+      const cId = emp.company_id || this.getCurrentCompanyId();
+      const pinTaken = await this.isPinTaken(cleanNewPin, emp.id, cId);
+      if (pinTaken) {
+        return this.#createEnvelope(false, null, 'رمز PIN الجديد مستخدم بالفعل لحساب آخر بالنظام! يرجى اختيار رمز مختلف');
+      }
+
+      // تحديث الموظف
+      emp.pin = cleanNewPin;
+
+      // إذا كان الموظف مديراً لشركة، نحدث رمز المدير أيضاً للشركة المتوافقة
+      if (emp.role === 'manager' || emp.role === 'admin' || emp.role === 'hr') {
+        const cId = emp.company_id || this.getCurrentCompanyId();
+        const company = (db.companies || []).find(c => c.id === cId || c.email === emp.email);
+        if (company) {
+          company.pin = cleanNewPin;
+          company.manager_pin = cleanNewPin;
+        }
+      }
+
+      // الحفظ في LocalDatabase
+      LocalDatabase.saveDB(db);
+
+      // التحديث في Supabase
+      if (supabase) {
+        try {
+          await supabase.from('employees').update({ pin: cleanNewPin }).eq('id', emp.id);
+          if (emp.role === 'manager' || emp.role === 'admin') {
+            await supabase.from('companies').update({ manager_pin: cleanNewPin }).eq('id', emp.company_id);
+          }
+        } catch (sbErr) {
+          console.warn('[Supabase changeEmployeePin Fallback]:', sbErr);
+        }
+      }
+
+      // تسجيل الحدث الرقابي
+      AuditMiddleware.log({
+        action: 'CHANGE_PIN',
+        actionType: 'تعديل أمني',
+        target: 'employees',
+        targetId: emp.id,
+        details: `قام الموظف ${emp.fullName || emp.id} بتغيير رمز PIN السري الخاص به بنجاح.`
+      });
+
+      return this.#createEnvelope(true, { employeeId: emp.id, pin: cleanNewPin }, 'تم تغيير رمز PIN السري الخاص بك بنجاح!');
+    } catch (err) {
+      return this.#handleError(err, 'فشل تغيير رمز PIN السري');
     }
   }
 
@@ -5082,6 +5314,8 @@ window.ApiService = ApiService;
 window.AuditMiddleware = AuditMiddleware;
 window.LocalDatabase = LocalDatabase;
 window.USE_BACKEND_API = USE_BACKEND_API;
+window.DEFAULT_AVATARS = DEFAULT_AVATARS;
+window.detectGender = detectGender;
 
   if (supabase) {
     window.supabaseClient = supabase;

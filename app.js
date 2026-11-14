@@ -43,6 +43,57 @@
   }
 
   /* ==========================================================================
+     1.5 AVATAR PRESETS & DYNAMIC GENDER DETECTION (ذكر / أنثى)
+     ========================================================================== */
+  const DEFAULT_AVATARS = {
+    male: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
+    female: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80'
+  };
+
+  function detectGender(fullName) {
+    if (!fullName) return 'male';
+    const name = String(fullName).trim();
+    if (/^(مهندسة|دكتورة|أستاذة|مدام|آنسة|سيدة|م\/|د\/)\s/i.test(name)) return 'female';
+    if (/^(مهندس|دكتور|أستاذ|سيد|م\.|د\.)\s/i.test(name) && !/(سارة|مريم|فاطمة|نور)/i.test(name)) return 'male';
+
+    const parts = name.replace(/^(م\.|م\/|د\.|د\/|مهندس|مهندسة|أستاذ|أستاذة)\s+/i, '').trim().split(/\s+/);
+    const firstName = parts[0] || '';
+
+    const femaleNames = new Set([
+      'فاطمة', 'فاطمه', 'مريم', 'سارة', 'ساره', 'نور', 'نورهان', 'نورا', 'ياسمين', 'هدى', 'منى', 
+      'رانيا', 'داليا', 'أسماء', 'اسماء', 'شيرين', 'دينا', 'إيمان', 'ايمان', 'رحاب', 'آية', 'اية', 
+      'بسمة', 'بسمه', 'سلمى', 'سلمي', 'هدير', 'رنا', 'نهى', 'نهي', 'رضوى', 'رضوي', 'أميرة', 'اميرة', 
+      'اميره', 'أميره', 'هناء', 'نجلاء', 'مروة', 'مروه', 'ندى', 'ندي', 'ريم', 'خلود', 'عائشة', 
+      'عائشه', 'خديجة', 'خديجه', 'زينب', 'فريدة', 'فريده', 'حبيبة', 'حبيبه', 'شهد', 'جنا', 'جنى', 
+      'ملك', 'روان', 'آلاء', 'الاء', 'إسراء', 'اسراء', 'منار', 'يارا', 'هاجر', 'ميار', 'شروق', 
+      'أروى', 'اروى', 'لمياء', 'صفاء', 'وفاء', 'ولاء', 'غادة', 'غاده', 'لبنى', 'لبني', 'عبير', 
+      'هبة', 'هبه', 'رشا', 'سامية', 'ساميه', 'سحر', 'سهير', 'ماجدة', 'ماجده', 'نادية', 'ناديه'
+    ]);
+
+    if (femaleNames.has(firstName)) return 'female';
+    if (firstName.endsWith('ة') || (firstName.endsWith('اء') && firstName.length > 3)) {
+      const maleWithTa = new Set(['أسامة', 'اسامة', 'اسامه', 'أسامه', 'حمزة', 'حمزه', 'طلحة', 'طلحه', 'عبيدة', 'عبيده', 'عنترة', 'عنتره', 'قتادة', 'عكرمة']);
+      if (!maleWithTa.has(firstName)) return 'female';
+    }
+    return 'male';
+  }
+
+  function getEmployeeAvatar(emp) {
+    if (!emp) return DEFAULT_AVATARS.male;
+    const gender = emp.gender || detectGender(emp.fullName || emp.name || '');
+    if (emp.avatar && typeof emp.avatar === 'string' && emp.avatar.trim() !== '') {
+      if (gender === 'male' && emp.avatar.includes('photo-1534528741775-53994a69daeb')) {
+        return DEFAULT_AVATARS.male;
+      }
+      if (gender === 'female' && (emp.avatar.includes('photo-1507003211169') || emp.avatar.includes('photo-1535713875002') || emp.avatar.includes('photo-1500648767791'))) {
+        return DEFAULT_AVATARS.female;
+      }
+      return emp.avatar;
+    }
+    return gender === 'female' ? DEFAULT_AVATARS.female : DEFAULT_AVATARS.male;
+  }
+
+  /* ==========================================================================
      2. NATIVE INTL FORMATTERS & NUMBER TO ARABIC WORDS
      ========================================================================== */
 
@@ -950,8 +1001,8 @@
         const roleLabel = roleType === 'programmer' ? 'مبرمج النظام' : (roleType === 'manager' || roleType === 'admin' ? 'الإدارة العليا' : 'مشرف معتمد');
         adminHeaderRole.textContent = roleLabel;
       }
-      if (adminHeaderAvatar && activeAdminUser.avatar) {
-        adminHeaderAvatar.src = activeAdminUser.avatar;
+      if (adminHeaderAvatar) {
+        adminHeaderAvatar.src = getEmployeeAvatar(activeAdminUser);
       }
     }
   }
@@ -1448,7 +1499,7 @@
         roleBadge = '<span class="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300 border border-slate-300 dark:border-slate-700 flex items-center gap-1.5 w-fit"><i class="fa-solid fa-user text-[10px]"></i> موظف (Staff)</span>';
       }
 
-      const avatarSrc = emp.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100';
+      const avatarSrc = getEmployeeAvatar(emp);
       const isCurrentUser = store.state.currentUser && store.state.currentUser.id === emp.id;
       const empCode = getEmployeeCode(emp);
       const childId = `prog-user-child-${emp.id}`;
@@ -1587,7 +1638,7 @@
     document.getElementById('progResetPinUserName').textContent = emp.fullName;
     document.getElementById('progResetPinUserCode').textContent = emp.id;
     document.getElementById('progResetPinUserRole').textContent = resolveUserRole(emp) === 'programmer' ? 'مبرمج' : (resolveUserRole(emp) === 'manager' ? 'مدير' : 'موظف');
-    document.getElementById('progResetPinUserAvatar').src = emp.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100';
+    document.getElementById('progResetPinUserAvatar').src = getEmployeeAvatar(emp);
     document.getElementById('progResetPinInput').value = emp.pin || '1234';
 
     modal.classList.remove('hidden');
@@ -1601,7 +1652,7 @@
     document.getElementById('progChangeRoleUserId').value = emp.id;
     document.getElementById('progChangeRoleUserName').textContent = `${emp.fullName} (${getEmployeeCode(emp)})`;
     document.getElementById('progChangeRoleCurrentRoleBadge').textContent = currentRole === 'programmer' ? 'مبرمج (Super Admin)' : (currentRole === 'manager' ? 'مدير (Manager)' : 'موظف (Employee)');
-    document.getElementById('progChangeRoleUserAvatar').src = emp.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100';
+    document.getElementById('progChangeRoleUserAvatar').src = getEmployeeAvatar(emp);
 
     const radio = document.querySelector(`input[name="progNewRoleRadio"][value="${currentRole}"]`);
     if (radio) radio.checked = true;
@@ -2616,35 +2667,9 @@
 
   function updateDemoPinChips(users) {
     const container = document.getElementById('authDemoPinChips');
-    if (!container) return;
-
-    if (!users || users.length === 0) {
+    if (container) {
       container.innerHTML = '';
-      return;
     }
-
-    const chips = users.map(emp => {
-      const pin = emp.pin || '123456';
-      const roleTitle = (emp.role === 'programmer' || emp.role === 'admin') 
-        ? 'مسؤول' 
-        : (emp.role === 'manager' ? 'مدير' : 'موظف');
-      const cleanName = (emp.fullName || '').trim().split(' ')[0] || emp.fullName;
-      return `<button type="button" class="px-1.5 py-0.5 rounded bg-blue-100 dark:bg-slate-800 text-blue-700 dark:text-blue-300 font-mono font-bold hover:bg-blue-200 transition-colors" data-demo-pin="${escapeHTML(pin)}" title="انقر لملء رمز PIN الخاص بـ ${escapeHTML(emp.fullName)}">${escapeHTML(pin)}</button> (${escapeHTML(roleTitle)}: ${escapeHTML(cleanName)})`;
-    });
-
-    container.innerHTML = `رموز PIN التجريبية للمسجلين: ${chips.join(' • ')}`;
-
-    container.querySelectorAll('[data-demo-pin]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        sound.playClick();
-        const pin = btn.dataset.demoPin;
-        if (pin) {
-          store.state.authPinInput = pin;
-          updateAuthPinDots();
-          submitAuthPinLogin(pin);
-        }
-      });
-    });
   }
 
   /**
@@ -3362,6 +3387,167 @@
         showToast(res.message, 'error');
       }
     });
+
+    // Setup Employee Change PIN Modal
+    setupChangePinModal();
+  }
+
+  /**
+   * إعداد نافذة تغيير رمز PIN السري للموظف (Self-Service PIN Change)
+   */
+  function setupChangePinModal() {
+    const openBtn = document.getElementById('empChangePinBtn');
+    const modal = document.getElementById('changePinModal');
+    const closeBtn = document.getElementById('closeChangePinModalBtn');
+    const cancelBtn = document.getElementById('cancelChangePinBtn');
+    const form = document.getElementById('changePinForm');
+    const currentPinInput = document.getElementById('currentPinInput');
+    const newPinInput = document.getElementById('newPinInput');
+    const confirmPinInput = document.getElementById('confirmNewPinInput');
+    const genPinBtn = document.getElementById('generateNewPinBtn');
+    const msgEl = document.getElementById('changePinMessage');
+    const submitBtn = document.getElementById('submitChangePinBtn');
+
+    if (!modal) return;
+
+    const resetModal = () => {
+      form?.reset();
+      if (msgEl) {
+        msgEl.className = 'hidden p-3 rounded-xl text-xs font-bold transition-all';
+        msgEl.textContent = '';
+      }
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="fa-solid fa-check"></i><span>حفظ رمز PIN الجديد</span>';
+      }
+    };
+
+    const showMsg = (text, type = 'error') => {
+      if (!msgEl) return;
+      msgEl.className = `p-3 rounded-xl text-xs font-bold transition-all ${
+        type === 'error'
+          ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
+          : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+      }`;
+      msgEl.textContent = text;
+      msgEl.classList.remove('hidden');
+    };
+
+    openBtn?.addEventListener('click', () => {
+      sound.playClick();
+      resetModal();
+      modal.classList.remove('hidden');
+      setTimeout(() => currentPinInput?.focus(), 100);
+    });
+
+    closeBtn?.addEventListener('click', () => {
+      modal.classList.add('hidden');
+      resetModal();
+    });
+
+    cancelBtn?.addEventListener('click', () => {
+      modal.classList.add('hidden');
+      resetModal();
+    });
+
+    genPinBtn?.addEventListener('click', () => {
+      sound.playClick();
+      const randomPin = generateRandom6DigitPin();
+      if (newPinInput) {
+        newPinInput.value = randomPin;
+        newPinInput.type = 'text';
+      }
+      if (confirmPinInput) {
+        confirmPinInput.value = randomPin;
+        confirmPinInput.type = 'text';
+      }
+      setTimeout(() => {
+        if (newPinInput) newPinInput.type = 'password';
+        if (confirmPinInput) confirmPinInput.type = 'password';
+      }, 3000);
+    });
+
+    // Eye visibility toggle
+    modal.querySelectorAll('.toggle-pin-visibility').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const targetId = btn.dataset.target;
+        const input = document.getElementById(targetId);
+        if (!input) return;
+        const icon = btn.querySelector('i');
+        if (input.type === 'password') {
+          input.type = 'text';
+          if (icon) {
+            icon.classList.remove('fa-eye-slash');
+            icon.classList.add('fa-eye');
+          }
+        } else {
+          input.type = 'password';
+          if (icon) {
+            icon.classList.remove('fa-eye');
+            icon.classList.add('fa-eye-slash');
+          }
+        }
+      });
+    });
+
+    form?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const user = store.state.currentUser;
+      if (!user) {
+        showMsg('جلسة غير صالحة، يرجى تسجيل الدخول مجدداً', 'error');
+        return;
+      }
+
+      const oldPin = currentPinInput?.value?.trim() || '';
+      const newPin = newPinInput?.value?.trim() || '';
+      const confirmPin = confirmPinInput?.value?.trim() || '';
+
+      if (!/^\d{6}$/.test(newPin)) {
+        showMsg('يجب أن يتكون رمز PIN الجديد من 6 أرقام تماماً', 'error');
+        sound.playError();
+        return;
+      }
+
+      if (newPin !== confirmPin) {
+        showMsg('رمز PIN الجديد وتأكيده غير متطابقين!', 'error');
+        sound.playError();
+        return;
+      }
+
+      if (newPin === oldPin) {
+        showMsg('رمز PIN الجديد يجب أن يكون مختلفاً عن الرمز الحالي', 'error');
+        sound.playError();
+        return;
+      }
+
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i><span>جاري الحفظ والتحقق...</span>';
+      }
+
+      const res = await ApiService.changeEmployeePin(user.id, oldPin, newPin);
+
+      if (res.success) {
+        sound.playSuccess();
+        showMsg('تم حفظ رمز PIN الجديد بنجاح!', 'success');
+        user.pin = newPin;
+        store.state.currentUser = { ...user, pin: newPin };
+        await loadEmployees();
+        populateAuthBioSelect();
+        showToast('تم تحديث رمز PIN السري الخاص بك بنجاح', 'success');
+        setTimeout(() => {
+          modal.classList.add('hidden');
+          resetModal();
+        }, 1200);
+      } else {
+        sound.playError();
+        showMsg(res.message || 'فشل تحديث رمز PIN', 'error');
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = '<i class="fa-solid fa-check"></i><span>حفظ رمز PIN الجديد</span>';
+        }
+      }
+    });
   }
 
   /**
@@ -3386,7 +3572,7 @@
     if (welcomeEl) welcomeEl.textContent = `أهلاً بك، ${emp.fullName}`;
     if (idBadgeEl) idBadgeEl.textContent = emp.id;
     if (jobDeptEl) jobDeptEl.textContent = `${emp.jobTitle || 'موظف'} • ${emp.department || 'عام'}`;
-    if (avatarImg) avatarImg.src = emp.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150';
+    if (avatarImg) avatarImg.src = getEmployeeAvatar(emp);
 
     const isPreview = store.state.viewMode === 'employee_preview';
     const currentRole = store.state.originalRole || resolveUserRole(emp);
@@ -5286,7 +5472,7 @@
 
     content.innerHTML = `
       <div class="flex items-center gap-4 text-right mb-4">
-        <img src="${escapeHTML(emp.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150')}" alt="${escapeHTML(emp.fullName)}" class="w-16 h-16 rounded-xl object-cover border-2 border-emerald-500 shadow-md">
+        <img src="${escapeHTML(getEmployeeAvatar(emp))}" alt="${escapeHTML(emp.fullName)}" class="w-16 h-16 rounded-xl object-cover border-2 border-emerald-500 shadow-md">
         <div>
           <h4 class="text-base font-black text-slate-900 dark:text-white">${escapeHTML(emp.fullName)}</h4>
           <p class="text-xs text-slate-600 dark:text-slate-400 font-medium">${escapeHTML(emp.jobTitle || 'موظف')} • ${escapeHTML(emp.department || '')}</p>
@@ -5737,6 +5923,32 @@
      13. MODULE 4: EMPLOYEES MANAGEMENT CONTROLLER (Debounced Search)
      ========================================================================== */
 
+  /**
+   * ضبط خيارات رتب الموظف: خيار "مبرمج نظام" لا يظهر إلا للمبرمج فقط (Super Admin)
+   */
+  function updateEmpFormRoleOptions(targetEmpRole = null) {
+    const roleSelect = document.getElementById('empFormRole');
+    if (!roleSelect) return;
+    const currentUser = store.state.currentUser;
+    const isProgrammer = currentUser && resolveUserRole(currentUser) === 'programmer';
+    let progOpt = roleSelect.querySelector('option[value="programmer"]');
+
+    if (isProgrammer) {
+      if (!progOpt) {
+        progOpt = document.createElement('option');
+        progOpt.value = 'programmer';
+        progOpt.textContent = 'مبرمج نظام (Programmer - Super Admin تحكم شامل)';
+        roleSelect.appendChild(progOpt);
+      }
+      progOpt.hidden = false;
+      progOpt.disabled = false;
+    } else {
+      if (progOpt) {
+        progOpt.remove();
+      }
+    }
+  }
+
   function setupEmployeesManagement() {
     const searchInput = document.getElementById('employeeSearchInput');
     const deptFilter = document.getElementById('employeeDeptFilter');
@@ -5752,11 +5964,26 @@
     searchInput?.addEventListener('input', debouncedRenderEmployees);
     deptFilter?.addEventListener('change', () => renderEmployeesTable());
 
+    const fullNameInput = document.getElementById('empFormFullName');
+    const genderSelect = document.getElementById('empFormGender');
+    fullNameInput?.addEventListener('input', () => {
+      if (genderSelect && !document.getElementById('empFormId').value) {
+        genderSelect.value = detectGender(fullNameInput.value);
+      }
+    });
+
     openAddBtn?.addEventListener('click', () => {
       form?.reset();
+      updateEmpFormRoleOptions();
       document.getElementById('empFormId').value = '';
       document.getElementById('employeeModalTitle').textContent = 'إضافة موظف جديد';
+      const submitBtn = document.getElementById('empFormSubmitBtn');
+      if (submitBtn) {
+        submitBtn.innerHTML = '<i class="fa-solid fa-user-plus ml-1.5"></i><span>إضافة موظف جديد</span>';
+        submitBtn.className = 'px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm md:text-base font-bold shadow-md shadow-blue-500/20 transition-all active:scale-95 flex items-center gap-1.5';
+      }
       document.getElementById('empFormPin').value = generateRandom6DigitPin();
+      if (genderSelect) genderSelect.value = 'male';
       if (document.getElementById('empFormRole')) document.getElementById('empFormRole').value = 'employee';
       if (document.getElementById('empFormEmail')) document.getElementById('empFormEmail').value = '';
       if (document.getElementById('empFormSalesTarget')) document.getElementById('empFormSalesTarget').value = 0;
@@ -5775,11 +6002,22 @@
     form?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const empId = document.getElementById('empFormId').value;
+      const fullNameVal = document.getElementById('empFormFullName').value;
+      const genderVal = document.getElementById('empFormGender')?.value || detectGender(fullNameVal);
+      let roleVal = document.getElementById('empFormRole')?.value || 'employee';
+      const currentUser = store.state.currentUser;
+      const isProgrammer = currentUser && resolveUserRole(currentUser) === 'programmer';
+      if (roleVal === 'programmer' && !isProgrammer) {
+        roleVal = 'employee';
+      }
+
       const empPayload = {
-        fullName: document.getElementById('empFormFullName').value,
+        fullName: fullNameVal,
+        gender: genderVal,
+        avatar: genderVal === 'female' ? DEFAULT_AVATARS.female : DEFAULT_AVATARS.male,
         department: document.getElementById('empFormDept').value,
         jobTitle: document.getElementById('empFormJobTitle').value,
-        role: document.getElementById('empFormRole')?.value || 'employee',
+        role: roleVal,
         email: document.getElementById('empFormEmail')?.value || '',
         hireDate: document.getElementById('empFormHireDate').value,
         shiftStart: document.getElementById('empFormShiftStart').value,
@@ -5804,7 +6042,7 @@
 
       if (res.success) {
         sound.playSuccess();
-        showToast(empId ? 'تم تحديث بيانات الموظف بنجاح' : 'تمت إضافة الموظف الجديد بنجاح', 'success');
+        showToast(empId ? `تم تحديث وتعديل بيانات الموظف (${fullNameVal}) بنجاح` : `تمت إضافة الموظف الجديد (${fullNameVal}) بنجاح`, 'success');
         modal?.classList.add('hidden');
         await loadEmployees();
         populateAuthBioSelect();
@@ -5897,7 +6135,7 @@
         <tr class="table-parent-row bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/60 transition-colors cursor-pointer md:cursor-default" data-child-id="${childId}">
           <td class="p-2 sm:p-2.5 font-bold text-slate-900 dark:text-white">
             <div class="flex items-center gap-2">
-              <img src="${escapeHTML(emp.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150')}" alt="${escapeHTML(emp.fullName)}" class="w-8 h-8 rounded-full object-cover border border-slate-300 dark:border-slate-700 shrink-0">
+              <img src="${escapeHTML(getEmployeeAvatar(emp))}" alt="${escapeHTML(emp.fullName)}" class="w-8 h-8 rounded-full object-cover border border-slate-300 dark:border-slate-700 shrink-0">
               <div class="min-w-0">
                 <div class="text-slate-900 dark:text-white font-bold text-xs sm:text-sm truncate max-w-[130px] sm:max-w-none">${escapeHTML(emp.fullName)}</div>
                 <div class="flex items-center gap-1.5 mt-0.5">
@@ -5996,9 +6234,18 @@
 
   function openEditEmployeeModal(emp) {
     const modal = document.getElementById('employeeModal');
+    updateEmpFormRoleOptions(emp.role);
     document.getElementById('employeeModalTitle').textContent = `تعديل بيانات الموظف (${emp.fullName})`;
+    const submitBtn = document.getElementById('empFormSubmitBtn');
+    if (submitBtn) {
+      submitBtn.innerHTML = '<i class="fa-solid fa-check ml-1.5"></i><span>حفظ التعديلات</span>';
+      submitBtn.className = 'px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm md:text-base font-bold shadow-md shadow-emerald-500/20 transition-all active:scale-95 flex items-center gap-1.5';
+    }
     document.getElementById('empFormId').value = emp.id;
     document.getElementById('empFormFullName').value = emp.fullName;
+    if (document.getElementById('empFormGender')) {
+      document.getElementById('empFormGender').value = emp.gender || detectGender(emp.fullName || '');
+    }
     document.getElementById('empFormDept').value = emp.department;
     document.getElementById('empFormJobTitle').value = emp.jobTitle;
     if (document.getElementById('empFormRole')) document.getElementById('empFormRole').value = emp.role || 'employee';
@@ -7236,7 +7483,8 @@
           document.getElementById('managerDecisionModal'),
           document.getElementById('progChangeRoleModal'),
           document.getElementById('progResetPinModal'),
-          document.getElementById('progAuditDetailsModal')
+          document.getElementById('progAuditDetailsModal'),
+          document.getElementById('changePinModal')
         ];
 
         let closedAny = false;
@@ -7379,7 +7627,7 @@
       const title = `ملف الموظف - ${emp.fullName} (${emp.id})`;
       const html = `
         <div class="flex items-center gap-3 p-3 rounded-xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 mb-3">
-          <img src="${escapeHTML(emp.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150')}" alt="${escapeHTML(emp.fullName)}" class="w-12 h-12 rounded-full object-cover border-2 border-blue-500 shadow">
+          <img src="${escapeHTML(getEmployeeAvatar(emp))}" alt="${escapeHTML(emp.fullName)}" class="w-12 h-12 rounded-full object-cover border-2 border-blue-500 shadow">
           <div>
             <h4 class="font-bold text-slate-900 dark:text-white text-sm">${escapeHTML(emp.fullName)}</h4>
             <p class="text-xs text-slate-600 dark:text-slate-400 font-medium">${escapeHTML(emp.jobTitle)} • ${escapeHTML(emp.department)}</p>

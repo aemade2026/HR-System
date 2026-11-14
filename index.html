@@ -204,10 +204,6 @@
           <i class="fa-solid fa-right-to-bracket"></i>
           تأكيد رمز PIN والدخول
         </button>
-
-        <div id="authDemoPinChips" class="text-center text-[11px] text-slate-500 dark:text-slate-400">
-          <!-- Populated dynamically via JS -->
-        </div>
       </div>
 
       <!-- Remember Me Checkbox -->
@@ -236,19 +232,18 @@
         </div>
       </div>
 
-      <!-- New Employee Onboarding Button -->
-      <div class="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700/80 space-y-2.5">
-        <button id="openOnboardingBtn" class="w-full py-3 rounded-2xl border-2 border-dashed border-blue-400/60 dark:border-blue-500/40 bg-blue-50/60 dark:bg-blue-950/30 hover:bg-blue-100/80 dark:hover:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-extrabold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-sm">
-          <i class="fa-solid fa-user-plus text-base"></i>
-          تسجيل موظف جديد (انضمام إلى فريق العمل)
-        </button>
-
-        <div class="text-center pt-1">
+      <!-- Corporate Multi-Tenant Notice & Company Registration -->
+      <div class="mt-4 pt-3.5 border-t border-slate-200 dark:border-slate-700/80 text-center space-y-2.5">
+        <div>
           <a href="landing.html" class="inline-flex items-center gap-1.5 text-xs font-bold text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 transition-colors py-1 px-2.5 rounded-lg hover:bg-purple-50 dark:hover:bg-purple-950/40">
             <i class="fa-solid fa-building text-[11px]"></i>
             <span>هل أنت منشأة جديدة؟ سجّل شركتك بالنظام الآن</span>
             <i class="fa-solid fa-arrow-left text-[10px]"></i>
           </a>
+        </div>
+        <div class="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 flex items-center justify-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+          <i class="fa-solid fa-user-shield text-blue-600 dark:text-blue-400 text-xs shrink-0"></i>
+          <span>إضافة وتعيين الموظفين الجدد تتم حصرياً عبر إدارة الموارد البشرية والمديرين</span>
         </div>
       </div>
 
@@ -334,7 +329,7 @@
           
           <!-- Profile Badge -->
           <div class="flex items-center gap-3.5 sm:gap-4">
-            <img id="empAvatarImg" src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150" alt="Avatar" class="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl object-cover border-2 border-blue-500 shadow-md">
+            <img id="empAvatarImg" src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80" alt="Avatar" class="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl object-cover border-2 border-blue-500 shadow-md">
             <div>
               <div class="flex items-center gap-2 flex-wrap">
                 <h1 id="empWelcomeName" class="text-lg sm:text-2xl font-black text-slate-900 dark:text-white">أهلاً بك، م. أحمد منصور</h1>
@@ -360,6 +355,10 @@
             <button id="empViewPayslipBtn" class="px-4 py-2.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs sm:text-sm shadow-md shadow-blue-500/20 flex items-center gap-2 transition-all active:scale-95">
               <i class="fa-solid fa-file-invoice-dollar"></i>
               <span>قسيمة الراتب الرسمية</span>
+            </button>
+            <button id="empChangePinBtn" type="button" class="px-4 py-2.5 rounded-2xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700/80 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 font-bold text-xs sm:text-sm shadow-sm flex items-center gap-2 transition-all active:scale-95">
+              <i class="fa-solid fa-key text-amber-500"></i>
+              <span>تغيير رمز PIN</span>
             </button>
             <!-- Install App On Mobile Button -->
             <button id="empInstallAppBtnHero" title="تثبيت تطبيق AE على الهاتف" class="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-cyan-600 via-blue-600 to-indigo-600 hover:opacity-95 text-white font-black text-xs sm:text-sm shadow-md shadow-blue-500/25 flex items-center gap-2 transition-all active:scale-95 border border-cyan-400/30 animate-pwa-glow">
@@ -2634,6 +2633,16 @@
       <form id="employeeForm" class="space-y-4">
         <input type="hidden" id="empFormId">
 
+        <!-- Target Company Context Badge -->
+        <div id="empFormCompanyContextBox" class="p-3 rounded-xl bg-purple-50/70 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/60 flex items-center justify-between text-xs">
+          <div class="flex items-center gap-2">
+            <i class="fa-solid fa-building text-purple-600 dark:text-purple-400 text-sm"></i>
+            <span class="font-bold text-slate-700 dark:text-slate-300">المنشأة / الشركة المعتمدة:</span>
+            <span id="empFormCompanyNameText" class="font-black text-purple-700 dark:text-purple-300">AE (HR-SYSTEM)</span>
+          </div>
+          <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200">إدارة الموارد البشرية</span>
+        </div>
+
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label class="block text-xs md:text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">الاسم الكامل *</label>
@@ -2662,14 +2671,20 @@
               <option value="employee">موظف عادي (Employee - بوابة الموظف فقط)</option>
               <option value="manager">مدير (Manager - إدارة الحضور والرواتب)</option>
               <option value="hr">مسؤول موارد بشرية (HR Manager)</option>
-              <option value="programmer">مبرمج نظام (Programmer - Super Admin تحكم شامل)</option>
             </select>
           </div>
         </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
-            <label class="block text-xs md:text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">البريد الإلكتروني (Gmail / Official)</label>
+            <label class="block text-xs md:text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">النوع / الجنس *</label>
+            <select id="empFormGender" required class="w-full px-3 py-2.5 rounded-lg text-base md:text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 focus:ring-2 focus:ring-blue-500 font-bold">
+              <option value="male" selected>ذكر (Male - رجل)</option>
+              <option value="female">أنثى (Female - سيدة)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs md:text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">البريد الإلكتروني</label>
             <input type="email" id="empFormEmail" placeholder="employee@gmail.com" class="w-full px-3 py-2.5 rounded-lg text-base md:text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 focus:ring-2 focus:ring-blue-500 focus:outline-none font-medium">
           </div>
           <div>
@@ -2747,8 +2762,9 @@
           <button type="button" id="cancelEmployeeModalBtn" class="px-4 py-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-sm md:text-base font-bold hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors">
             إلغاء
           </button>
-          <button type="submit" class="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm md:text-base font-bold shadow-md shadow-blue-500/20 transition-all active:scale-95">
-            حفظ بيانات الموظف
+          <button type="submit" id="empFormSubmitBtn" class="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm md:text-base font-bold shadow-md shadow-blue-500/20 transition-all active:scale-95 flex items-center gap-1.5">
+            <i class="fa-solid fa-check ml-1"></i>
+            <span>حفظ بيانات الموظف</span>
           </button>
         </div>
       </form>
@@ -3659,6 +3675,93 @@
           </button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- ==================================================================== -->
+  <!-- MODAL: CHANGE EMPLOYEE PIN CODE (تغيير رمز PIN السري للموظف) -->
+  <!-- ==================================================================== -->
+  <div id="changePinModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-black/60 modal-backdrop backdrop-blur-sm">
+    <div class="glass-panel rounded-3xl w-[95vw] sm:w-[90vw] max-w-md p-5 sm:p-7 mx-auto shadow-2xl modal-content-anim relative border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+      
+      <!-- Modal Header -->
+      <div class="flex items-center justify-between pb-4 border-b border-slate-200 dark:border-slate-800 mb-5">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-2xl bg-amber-500/10 text-amber-500 border border-amber-500/20 flex items-center justify-center text-lg shadow-sm">
+            <i class="fa-solid fa-key"></i>
+          </div>
+          <div>
+            <h3 class="text-base sm:text-lg font-black text-slate-900 dark:text-white">تغيير رمز PIN السري</h3>
+            <p class="text-xs text-slate-500 dark:text-slate-400">تحديث رمز البصمة السريع وتوثيق الدخول</p>
+          </div>
+        </div>
+        <button type="button" id="closeChangePinModalBtn" aria-label="إغلاق" class="w-8 h-8 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center transition-all">
+          <i class="fa-solid fa-xmark text-base"></i>
+        </button>
+      </div>
+
+      <!-- Change PIN Form -->
+      <form id="changePinForm" class="space-y-4">
+        <!-- Current PIN -->
+        <div>
+          <label class="block text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
+            <span>رمز PIN الحالي *</span>
+            <span class="text-[11px] text-slate-400 font-normal">للتحقق الأمني من هويتك</span>
+          </label>
+          <div class="relative">
+            <input type="password" id="currentPinInput" maxlength="6" pattern="[0-9]{4,6}" required placeholder="••••••" class="w-full px-3.5 py-3 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-mono font-bold text-center text-lg tracking-widest focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all" autocomplete="current-password">
+            <button type="button" class="toggle-pin-visibility absolute left-3 top-3.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" data-target="currentPinInput" title="إظهار / إخفاء الرمز">
+              <i class="fa-solid fa-eye-slash text-sm"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- New PIN -->
+        <div>
+          <label class="block text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
+            <span>رمز PIN الجديد (6 أرقام) *</span>
+            <button type="button" id="generateNewPinBtn" class="text-[11px] text-blue-600 dark:text-blue-400 hover:underline font-bold flex items-center gap-1">
+              <i class="fa-solid fa-arrows-rotate text-[10px]"></i>
+              <span>توليد تلقائي</span>
+            </button>
+          </label>
+          <div class="relative">
+            <input type="password" id="newPinInput" maxlength="6" pattern="[0-9]{6}" required placeholder="••••••" class="w-full px-3.5 py-3 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-mono font-bold text-center text-lg tracking-widest focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all" autocomplete="new-password">
+            <button type="button" class="toggle-pin-visibility absolute left-3 top-3.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" data-target="newPinInput" title="إظهار / إخفاء الرمز">
+              <i class="fa-solid fa-eye-slash text-sm"></i>
+            </button>
+          </div>
+          <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">يجب أن يتكون الرمز من 6 أرقام فريدة غير مستخدمة لحساب آخر.</p>
+        </div>
+
+        <!-- Confirm New PIN -->
+        <div>
+          <label class="block text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+            تأكيد رمز PIN الجديد *
+          </label>
+          <div class="relative">
+            <input type="password" id="confirmNewPinInput" maxlength="6" pattern="[0-9]{6}" required placeholder="••••••" class="w-full px-3.5 py-3 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-mono font-bold text-center text-lg tracking-widest focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all" autocomplete="new-password">
+            <button type="button" class="toggle-pin-visibility absolute left-3 top-3.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" data-target="confirmNewPinInput" title="إظهار / إخفاء الرمز">
+              <i class="fa-solid fa-eye-slash text-sm"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Error / Info Message Container -->
+        <div id="changePinMessage" class="hidden p-3 rounded-xl text-xs font-bold transition-all"></div>
+
+        <!-- Action Buttons -->
+        <div class="flex items-center gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+          <button type="submit" id="submitChangePinBtn" class="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-black text-xs sm:text-sm shadow-md shadow-blue-500/20 flex items-center justify-center gap-2 transition-all active:scale-95">
+            <i class="fa-solid fa-check"></i>
+            <span>حفظ رمز PIN الجديد</span>
+          </button>
+          <button type="button" id="cancelChangePinBtn" class="py-3 px-4 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-bold text-xs sm:text-sm transition-all">
+            إلغاء
+          </button>
+        </div>
+      </form>
+
     </div>
   </div>
 
