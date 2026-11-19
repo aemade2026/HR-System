@@ -26,7 +26,6 @@
   }
 // Toggle between remote REST API and local browser mock database
 const USE_BACKEND_API = false;
-const BACKEND_BASE_URL = 'http://localhost:8000/api/v1';
 
 // Avatar Presets for Male and Female
 const DEFAULT_AVATARS = {
@@ -4193,6 +4192,10 @@ class ApiService {
       const db = LocalDatabase.getDB();
       let logs = Array.isArray(db.audit_logs) ? [...db.audit_logs] : [];
 
+      if (companyId) {
+        logs = logs.filter(l => !l.company_id || l.company_id === companyId);
+      }
+
       if (filters.actionType && filters.actionType !== 'all') {
         logs = logs.filter(l => l.actionType === filters.actionType);
       }
@@ -5021,7 +5024,7 @@ class ApiService {
         if (!sbSuccess) {
           return this.#createEnvelope(false, cloneData(newRecord), 'تم تسجيل الحضور محلياً وتعذر الحفظ السحابي حالياً', {
             pendingSync: true,
-            punchType: 'check_in',
+            punchType,
             employee: cloneData(employee),
             timestamp: nowTimeStr,
             date: todayStr,
@@ -5037,7 +5040,7 @@ class ApiService {
         }
 
         return this.#createEnvelope(true, cloneData(newRecord), null, {
-          punchType: 'check_in',
+          punchType,
           employee: cloneData(employee),
           timestamp: nowTimeStr,
           date: todayStr,
@@ -5162,7 +5165,7 @@ class ApiService {
         if (!sbSuccess) {
           return this.#createEnvelope(false, cloneData(todayRecord), 'تم تسجيل الانصراف محلياً وتعذر التحديث السحابي حالياً', {
             pendingSync: true,
-            punchType: 'check_out',
+            punchType,
             employee: cloneData(employee),
             timestamp: nowTimeStr,
             date: todayRecord.date,
@@ -5177,7 +5180,7 @@ class ApiService {
         }
 
         return this.#createEnvelope(true, cloneData(todayRecord), null, {
-          punchType: 'check_out',
+          punchType,
           employee: cloneData(employee),
           timestamp: nowTimeStr,
           date: todayRecord.date,
@@ -5836,9 +5839,13 @@ class ApiService {
      PAYROLL CALCULATION ENGINE (EGYPTIAN LABOR LAW + MULTI-TENANT)
      ========================================================================== */
 
-  static async calculateMonthlyPayroll(monthStr = '2026-10', signal = null) {
+  static async calculateMonthlyPayroll(monthStr = null, signal = null) {
     try {
       await this.simulateDelay(120, signal);
+      const defaultMonth = (typeof this.getCairoDateString === 'function')
+        ? this.getCairoDateString(new Date()).slice(0, 7)
+        : new Date().toISOString().slice(0, 7);
+      monthStr = (typeof monthStr === 'string' && monthStr.trim()) ? monthStr.trim() : defaultMonth;
       const companyId = this.getCurrentCompanyId();
 
       // جلب الإعدادات والموظفين والحضور والتسويات التابعة لنفس الشركة

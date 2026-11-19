@@ -311,8 +311,8 @@
       leaves: [],
       permissions: [],
       adjustments: [],
-      currentMonth: '2026-10',
-      currentDate: '2026-10-11',
+      currentMonth: new Date().toISOString().slice(0, 7),
+      currentDate: new Date().toISOString().slice(0, 10),
       pinInput: '',
       soundEnabled: true,
       isDarkMode: false,
@@ -370,6 +370,7 @@
   }
 
   const store = new AppStore();
+  window.store = store;
 
   /* ==========================================================================
      5. TOAST NOTIFICATIONS HELPER
@@ -610,18 +611,6 @@
         } else {
           document.exitFullscreen().catch(() => {});
           fsBtn.innerHTML = '<i class="fa-solid fa-expand text-sm" aria-hidden="true"></i>';
-        }
-      });
-    }
-
-    // Reset Data button
-    const resetBtn = document.getElementById('resetDataBtn');
-    if (resetBtn) {
-      resetBtn.addEventListener('click', async () => {
-        if (confirm('هل أنت متأكد من رغبتك في إعادة ضبط كافة البيانات إلى الحالة الافتراضية الأولية؟')) {
-          await ApiService.resetDatabase();
-          showToast('تمت إعادة ضبط البيانات بنجاح', 'success');
-          location.reload();
         }
       });
     }
@@ -894,7 +883,6 @@
    */
   function updateRoleBasedUI(roleType) {
     const isPreview = store.state.viewMode === 'employee_preview';
-    const effectiveRole = isPreview ? 'employee' : roleType;
 
     // 1. شاشة الموظف (portal-employee)
     const roleSwitchContainer = document.getElementById('empRoleSwitchContainer');
@@ -1047,7 +1035,6 @@
      ========================================================================== */
 
   let activeProgrammerSubTab = 'progTabPaneUsers';
-  let cachedPermissionsMatrix = null;
   let programmerListenersBound = false;
 
   const PERMISSION_FRIENDLY_LABELS = {
@@ -1755,7 +1742,6 @@
       if (!tbody) return;
 
       const perms = db.role_permissions || INITIAL_DATABASE.role_permissions;
-      cachedPermissionsMatrix = cloneData(perms);
 
       const empPerms = perms.employee || {};
       const mgrPerms = perms.manager || perms.admin || {};
@@ -2139,7 +2125,6 @@
   /* --------------------------------------------------------------------------
      3.5 إدارة الشركات والمشتركين (Multi-Tenant SaaS Management)
      -------------------------------------------------------------------------- */
-  let cachedTenantsList = [];
 
   /**
    * جلب وعرض جدول إدارة الشركات والمشتركين في لوحة المبرمج
@@ -2151,7 +2136,6 @@
     try {
       const res = await ApiService.getAllTenants();
       const tenants = (res && res.success) ? (res.data || []) : [];
-      cachedTenantsList = tenants;
 
       // تحديث عدادات KPI
       const totalCount = tenants.length;
@@ -2599,7 +2583,6 @@
           لا يوجد موظفون مسجلون حالياً
         </div>
       `;
-      updateDemoPinChips([]);
       return;
     }
 
@@ -2663,15 +2646,6 @@
         }
       });
     });
-
-    updateDemoPinChips(usersToShow.map(u => u.user));
-  }
-
-  function updateDemoPinChips(users) {
-    const container = document.getElementById('authDemoPinChips');
-    if (container) {
-      container.innerHTML = '';
-    }
   }
 
   /**
@@ -2951,7 +2925,6 @@
     const rememberMe = authRememberMeCheck ? authRememberMeCheck.checked : true;
     const res = await ApiService.loginWithPin(pin, rememberMe);
     const user = res.user || res.data?.user || res.employee || res.data?.employee;
-    const session = res.session || res.data?.session;
 
     if (res.success && user) {
       sound.playSuccess();
@@ -2976,7 +2949,6 @@
    */
   function setupOnboardingWizard() {
     const modal = document.getElementById('onboardingModal');
-    const openBtn = document.getElementById('openOnboardingBtn');
     const closeBtn = document.getElementById('closeOnboardingModalBtn');
     const step1 = document.getElementById('wizardStep1');
     const step2 = document.getElementById('wizardStep2');
@@ -3055,7 +3027,7 @@
       }
     };
 
-    openBtn?.addEventListener('click', async () => {
+    async function openOnboardingWizard() {
       sound.playClick();
       form?.reset();
       const nextId = await ApiService.getNextEmployeeId();
@@ -3063,7 +3035,8 @@
       await populateOnboardCompanies();
       goToStep1();
       modal?.classList.remove('hidden');
-    });
+    }
+    window.openOnboardingWizard = openOnboardingWizard;
 
     closeBtn?.addEventListener('click', () => modal?.classList.add('hidden'));
 
@@ -3616,7 +3589,6 @@
     }
 
     // 2. Salary Status Badge
-    const salaryStatusCard = document.getElementById('empSalaryStatusCard');
     const salaryStatusDot = document.getElementById('empSalaryStatusDot');
     const salaryStatusText = document.getElementById('empSalaryStatusText');
     const statusVal = emp.salaryStatus || 'paid';
@@ -3722,8 +3694,9 @@
       if (precText) precText.textContent = `دقة التحديد: ±${todayRec.location_coords.accuracy || 6} متر`;
     }
 
-    // 4. Monthly Personal Stats Calculation (October 2026)
-    const empLogs = store.state.attendance.filter(a => a.employeeId === emp.id && a.date.startsWith('2026-10'));
+    // 4. Monthly Personal Stats Calculation (Current Month)
+    const targetMonth = store.state.currentMonth || new Date().toISOString().slice(0, 7);
+    const empLogs = store.state.attendance.filter(a => a.employeeId === emp.id && typeof a.date === 'string' && a.date.startsWith(targetMonth));
     let totalActualHours = 0;
     let totalLateMins = 0;
     let totalEarlyMins = 0;
@@ -4684,7 +4657,6 @@
             await loadEmployees();
             populateAuthBioSelect();
             renderQuickLoginShortcuts();
-            updateDemoPinChips();
             loadAndRenderAdminRequests();
             renderApprovalsTable();
             refreshPendingApprovalsBadge();
@@ -4847,7 +4819,6 @@
           await loadEmployees();
           populateAuthBioSelect();
           renderQuickLoginShortcuts();
-          updateDemoPinChips();
           await loadAndRenderAdminRequests();
           await renderApprovalsTable();
           refreshPendingApprovalsBadge();
@@ -4884,7 +4855,6 @@
           await loadEmployees();
           populateAuthBioSelect();
           renderQuickLoginShortcuts();
-          updateDemoPinChips();
           await loadAndRenderAdminRequests();
           await renderApprovalsTable();
           refreshPendingApprovalsBadge();
@@ -5810,6 +5780,9 @@
 
   function setupAttendanceView() {
     const filterMonth = document.getElementById('attFilterMonth');
+    if (filterMonth && store.state.currentMonth) {
+      filterMonth.value = store.state.currentMonth;
+    }
     const filterEmp = document.getElementById('attFilterEmployee');
     const filterDept = document.getElementById('attFilterDept');
     const filterStatus = document.getElementById('attFilterStatus');
@@ -6060,7 +6033,7 @@
     const isProgrammer = currentUser && resolveUserRole(currentUser) === 'programmer';
     let progOpt = roleSelect.querySelector('option[value="programmer"]');
 
-    if (isProgrammer) {
+    if (isProgrammer || targetEmpRole === 'programmer') {
       if (!progOpt) {
         progOpt = document.createElement('option');
         progOpt.value = 'programmer';
@@ -6919,6 +6892,9 @@
 
   function setupPayrollEngine() {
     const monthPicker = document.getElementById('payrollMonthPicker');
+    if (monthPicker && store.state.currentMonth) {
+      monthPicker.value = store.state.currentMonth;
+    }
     const refreshBtn = document.getElementById('refreshPayrollBtn');
     const exportCsvBtn = document.getElementById('exportPayrollCsvBtn');
 
@@ -7131,31 +7107,72 @@
     modal?.classList.remove('hidden');
   }
 
+  /**
+   * Safe CSV cell formatter (CSV / Formula Injection protection)
+   * Doubles double-quotes and prepends ' if value starts with =, +, -, or @
+   * @param {*} val
+   * @returns {string}
+   */
+  function csvCell(val) {
+    if (val === null || val === undefined) return '""';
+    let str = String(val);
+    if (/^[=+\-@]/.test(str)) {
+      str = "'" + str;
+    }
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+
+  window.csvCell = csvCell;
+
   function exportPayrollToCSV() {
     if (!store.state.currentPayrollData) return;
     const report = store.state.currentPayrollData.payrollReport;
 
     let csvContent = '\uFEFF'; // UTF-8 BOM for Arabic support in Excel
-    csvContent += 'الرقم الوظيفي,اسم الموظف,القسم,المسمى الوظيفي,الراتب الأساسي,إجمالي البدلات,أجر الإضافي,المكافآت,إجمالي الاستحقاقات,حسم التأخير,حسم الإجازات غير المدفوعة,الجزاءات الإدارية,السلف,التأمينات الاجتماعية,إجمالي الاستقطاعات,صافي الراتب\n';
+    const headers = [
+      'الرقم الوظيفي',
+      'اسم الموظف',
+      'القسم',
+      'المسمى الوظيفي',
+      'الراتب الأساسي',
+      'إجمالي البدلات',
+      'أجر الإضافي',
+      'المكافآت',
+      'عمولة المبيعات',
+      'إجمالي الاستحقاقات',
+      'خصم التأخير',
+      'خصم الانصراف المبكر',
+      'خصم الغياب',
+      'خصم الإجازات غير المدفوعة',
+      'الجزاءات الإدارية',
+      'السلف',
+      'التأمينات الاجتماعية',
+      'إجمالي الاستقطاعات',
+      'صافي الراتب'
+    ];
+    csvContent += headers.map(csvCell).join(',') + '\n';
 
     report.forEach(p => {
       const row = [
-        `"${p.employee.id}"`,
-        `"${p.employee.fullName}"`,
-        `"${p.employee.department}"`,
-        `"${p.employee.jobTitle}"`,
-        p.earnings.baseSalary,
-        p.earnings.totalAllowances,
-        p.earnings.overtimeEarnings,
-        p.earnings.bonuses,
-        p.earnings.gross,
-        (p.deductions.latePenalty + p.deductions.earlyLeavePenalty),
-        p.deductions.unpaidLeaveDeduction,
-        p.deductions.adminPenalties,
-        p.deductions.loans,
-        p.deductions.socialInsurance,
-        p.deductions.total,
-        p.netSalary
+        csvCell(p.employee.id),
+        csvCell(p.employee.fullName),
+        csvCell(p.employee.department),
+        csvCell(p.employee.jobTitle),
+        csvCell(p.earnings.baseSalary),
+        csvCell(p.earnings.totalAllowances),
+        csvCell(p.earnings.overtimeEarnings),
+        csvCell(p.earnings.bonuses),
+        csvCell(p.earnings.salesCommission ?? 0),
+        csvCell(p.earnings.gross),
+        csvCell(p.deductions.latePenalty),
+        csvCell(p.deductions.earlyLeavePenalty),
+        csvCell(p.deductions.absenceDeduction ?? 0),
+        csvCell(p.deductions.unpaidLeaveDeduction),
+        csvCell(p.deductions.adminPenalties),
+        csvCell(p.deductions.loans),
+        csvCell(p.deductions.socialInsurance),
+        csvCell(p.deductions.total),
+        csvCell(p.netSalary)
       ];
       csvContent += row.join(',') + '\n';
     });
@@ -7170,6 +7187,8 @@
     document.body.removeChild(link);
     showToast('تم تصدير مسير الرواتب بصيغة CSV بنجاح', 'success');
   }
+
+  window.exportPayrollToCSV = exportPayrollToCSV;
 
   /* ==========================================================================
      16. MODULE 7: DYNAMIC HR & PAYROLL SETTINGS CONTROLLER
@@ -7568,8 +7587,8 @@
       });
     }
 
-    // 3. Employee Modal Dept Select (if present)
-    const empDeptSelect = document.getElementById('empDeptSelect') || document.getElementById('employeeDeptSelect');
+    // 3. Employee Modal Dept Select (#empFormDept)
+    const empDeptSelect = document.getElementById('empFormDept') || document.getElementById('empDeptSelect') || document.getElementById('employeeDeptSelect');
     if (empDeptSelect) {
       const cur = empDeptSelect.value;
       empDeptSelect.innerHTML = '';
@@ -7616,7 +7635,7 @@
           document.getElementById('managerDecisionModal'),
           document.getElementById('progChangeRoleModal'),
           document.getElementById('progResetPinModal'),
-          document.getElementById('progAuditDetailsModal'),
+          document.getElementById('requestDetailsModal'),
           document.getElementById('changePinModal')
         ];
 
