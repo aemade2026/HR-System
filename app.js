@@ -3372,7 +3372,8 @@
       const res = await ApiService.updateEmployeeSales(user.id, {
         salesTarget: target,
         salesAchieved: achieved,
-        commissionRate: rate
+        commissionRate: rate,
+        month: store.state.currentMonth
       });
 
       if (res.success) {
@@ -6887,8 +6888,9 @@
           <td class="p-2 sm:p-2.5 font-mono font-bold text-rose-700 dark:text-rose-400 text-xs sm:text-sm tabular-nums num-display bg-rose-50/40 dark:bg-rose-950/20 hidden md:table-cell">
             ${formatCurrency(p.deductions.total)}
           </td>
-          <td class="p-2 sm:p-2.5 font-mono font-black text-emerald-700 dark:text-emerald-300 text-xs sm:text-sm tabular-nums num-display bg-emerald-50/60 dark:bg-emerald-950/30">
+          <td class="p-2 sm:p-2.5 font-mono font-black ${p.shortfall > 0 ? 'text-rose-700 dark:text-rose-400 bg-rose-50/60 dark:bg-rose-950/30' : 'text-emerald-700 dark:text-emerald-300 bg-emerald-50/60 dark:bg-emerald-950/30'} text-xs sm:text-sm tabular-nums num-display">
             ${formatCurrency(p.netSalary)}
+            ${p.shortfall > 0 ? `<div class="text-[10px] text-rose-600 dark:text-rose-400 font-bold flex items-center gap-1 mt-0.5" title="عجز مالي"><i class="fa-solid fa-triangle-exclamation"></i> عجز: ${formatCurrency(p.shortfall)}</div>` : ''}
           </td>
           <td class="p-2 sm:p-2.5 text-center hidden md:table-cell">
             <div class="flex items-center justify-center gap-1.5">
@@ -6927,10 +6929,15 @@
                   <span class="text-slate-500 dark:text-slate-400 block text-[11px] font-medium">إجمالي الاستقطاع:</span>
                   <span class="font-mono font-bold text-rose-600 dark:text-rose-400">${formatCurrency(p.deductions.total)}</span>
                 </div>
-                <div class="col-span-2 p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 flex items-center justify-between">
-                  <span class="font-bold text-emerald-800 dark:text-emerald-300">الصافي النهائي المستحق:</span>
-                  <span class="font-mono font-black text-emerald-700 dark:text-emerald-300 text-sm">${formatCurrency(p.netSalary)}</span>
+                <div class="col-span-2 p-2 rounded-lg ${p.shortfall > 0 ? 'bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60' : 'bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60'} flex items-center justify-between">
+                  <span class="font-bold ${p.shortfall > 0 ? 'text-rose-800 dark:text-rose-300' : 'text-emerald-800 dark:text-emerald-300'}">الصافي النهائي المستحق:</span>
+                  <span class="font-mono font-black ${p.shortfall > 0 ? 'text-rose-700 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-300'} text-sm">${formatCurrency(p.netSalary)}</span>
                 </div>
+                ${p.shortfall > 0 ? `
+                <div class="col-span-2 p-2 rounded-lg bg-rose-100/80 dark:bg-rose-900/40 border border-rose-300 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-xs font-bold flex items-center gap-1.5">
+                  <i class="fa-solid fa-triangle-exclamation text-rose-600"></i>
+                  <span>تحذير: إجمالي الاستقطاعات تجاوز الاستحقاقات بعجز قدره ${formatCurrency(p.shortfall)}</span>
+                </div>` : ''}
               </div>
               <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                 <button class="view-payslip-btn px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-sm flex items-center gap-1.5 transition-all" data-action="view-payslip" data-empid="${escapeHTML(p.employee.id)}">

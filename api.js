@@ -2300,9 +2300,19 @@ class ApiService {
       const emp = (db.employees || []).find(e => e.id === id);
       if (!emp) return this.#createEnvelope(false, null, 'الموظف غير موجود');
 
+      const targetMonth = salesData.month || salesData.salesMonth || new Date().toISOString().slice(0, 7);
+      if (!emp.monthlySales) emp.monthlySales = {};
+
       if (salesData.salesTarget !== undefined) emp.salesTarget = Number(salesData.salesTarget);
       if (salesData.salesAchieved !== undefined) emp.salesAchieved = Number(salesData.salesAchieved);
       if (salesData.commissionRate !== undefined) emp.commissionRate = Number(salesData.commissionRate);
+      emp.salesMonth = targetMonth;
+
+      emp.monthlySales[targetMonth] = {
+        salesTarget: emp.salesTarget,
+        salesAchieved: emp.salesAchieved,
+        commissionRate: emp.commissionRate
+      };
 
       LocalDatabase.saveDB(db);
 
@@ -4381,15 +4391,18 @@ class ApiService {
         const diffMs = now - shiftStartDate;
         const rawLateMins = diffMs > 0 ? Math.floor(diffMs / (1000 * 60)) : 0;
         const netLateMins = Math.max(0, rawLateMins - permittedLateMins);
-        const isLateAfterGrace = netLateMins > (localSettings.gracePeriodMinutes || 15);
+        const gracePeriodMinutes = Number.isFinite(Number(localSettings.gracePeriodMinutes))
+          ? Number(localSettings.gracePeriodMinutes)
+          : 15;
+        const isLateAfterGrace = netLateMins > gracePeriodMinutes;
         const status = isLateAfterGrace ? 'late' : 'present';
 
         if (rawLateMins === 0) {
           message = 'تم تسجيل الحضور في الوقت المحدد بنجاح (الموقع الجغرافي موثق). يومك سعيد ومثمر!';
-        } else if (permittedLateMins > 0 && netLateMins <= (localSettings.gracePeriodMinutes || 15)) {
+        } else if (permittedLateMins > 0 && netLateMins <= gracePeriodMinutes) {
           message = `تم تسجيل الحضور مع إذن مسبق (${morningPerm.hours} ساعة). معفى من الخصم (GPS موثق).`;
-        } else if (rawLateMins <= (localSettings.gracePeriodMinutes || 15)) {
-          message = `تم تسجيل الحضور ضمن فترة السماح (${localSettings.gracePeriodMinutes || 15} دقيقة) مع توثيق GPS.`;
+        } else if (rawLateMins <= gracePeriodMinutes) {
+          message = `تم تسجيل الحضور ضمن فترة السماح (${gracePeriodMinutes} دقيقة) مع توثيق GPS.`;
         } else {
           message = `تم تسجيل الحضور مع تأخير قدره ${netLateMins} دقيقة (GPS موثق).`;
         }
@@ -5113,11 +5126,24 @@ class ApiService {
       const adjustmentsRes = await this.getAdjustments({ month: monthStr }, signal);
       const allAdjustments = adjustmentsRes.data || [];
 
-      const workingDays = Number(settings.workingDaysPerMonth || 30);
-      const dailyHours = Number(settings.workingHoursPerDay || 8);
-      const overtimeMultiplier = Number(settings.overtimeRateMultiplier || 1.35);
-      const absenceMultiplier = Number(settings.absencePenaltyMultiplier || 1.0);
-      const gracePeriod = Number(settings.gracePeriodMinutes || 15);
+      const leavesRes = await this.getLeaves({ status: 'approved' }, signal);
+      const allLeaves = leavesRes.data || [];
+
+      const workingDays = (Number.isFinite(Number(settings.workingDaysPerMonth)) && Number(settings.workingDaysPerMonth) > 0)
+        ? Number(settings.workingDaysPerMonth)
+        : 30;
+      const dailyHours = (Number.isFinite(Number(settings.workingHoursPerDay)) && Number(settings.workingHoursPerDay) > 0)
+        ? Number(settings.workingHoursPerDay)
+        : 8;
+      const overtimeMultiplier = Number.isFinite(Number(settings.overtimeRateMultiplier))
+        ? Number(settings.overtimeRateMultiplier)
+        : 1.35;
+      const absenceMultiplier = Number.isFinite(Number(settings.absencePenaltyMultiplier))
+        ? Number(settings.absencePenaltyMultiplier)
+        : 1.0;
+      const gracePeriod = Number.isFinite(Number(settings.gracePeriodMinutes))
+        ? Number(settings.gracePeriodMinutes)
+        : 15;
       const tardinessMode = settings.tardinessDeductionMode || 'tiered';
 
       const payrollReport = activeEmployees.map(emp => {
@@ -5131,7 +5157,11 @@ class ApiService {
         const hourlyRate = calculateHourlyRate(dailyRate, dailyHours);
         const minuteRate = calculateMinuteRate(hourlyRate);
 
-        const empAttendance = allAttendance.filter(a => a.employeeId === emp.id && a.date.startsWith(monthStr));
+        const empAttendance = allAttendance.filter(a =>
+          a.employeeId === emp.id &&
+          typeof a.date === 'string' &&
+          a.date.startsWith(monthStr)
+        );
 
         let totalOvertimeHours = 0;
         let totalLateMinutes = 0;
@@ -5160,24 +5190,59 @@ class ApiService {
         const totalAdminPenalties = Number(empAdjustments.filter(a => a.type === 'penalty').reduce((acc, a) => acc + (a.value || a.amount || 0), 0).toFixed(2));
         const totalLoans = Number(empAdjustments.filter(a => a.type === 'loan').reduce((acc, a) => acc + (a.value || a.amount || 0), 0).toFixed(2));
 
-        const salesTarget = Number(emp.salesTarget || 0);
-        const salesAchieved = Number(emp.salesAchieved || 0);
-        const commissionRate = Number(emp.commissionRate || 0);
+        let salesAchieved = 0;
+        let salesTarget = Number(emp.salesTarget || 0);
+        let commissionRate = Number(emp.commissionRate || 0);
+
+        if (emp.monthlySales && emp.monthlySales[monthStr]) {
+          const mSales = emp.monthlySales[monthStr];
+          salesAchieved = Number(mSales.salesAchieved ?? mSales.achieved ?? 0);
+          if (mSales.salesTarget !== undefined) salesTarget = Number(mSales.salesTarget);
+          if (mSales.commissionRate !== undefined) commissionRate = Number(mSales.commissionRate);
+        } else if (emp.salesMonth) {
+          if (emp.salesMonth === monthStr) {
+            salesAchieved = Number(emp.salesAchieved || 0);
+          } else {
+            salesAchieved = 0;
+          }
+        } else {
+          salesAchieved = 0;
+        }
+
         const salesCommission = (salesTarget > 0 && salesAchieved >= salesTarget && commissionRate > 0)
           ? Number(((salesAchieved * commissionRate) / 100).toFixed(2))
           : 0;
 
-        const unpaidDaysCount = 0;
+        const empUnpaidLeaves = allLeaves.filter(l =>
+          l.employeeId === emp.id &&
+          (l.status === 'approved' || l.status === 'مقبول') &&
+          (l.leaveType === 'unpaid' || l.leave_type === 'unpaid' || l.type === 'unpaid_leave') &&
+          ((typeof l.startDate === 'string' && l.startDate.startsWith(monthStr)) ||
+           (typeof l.start_date === 'string' && l.start_date.startsWith(monthStr)) ||
+           (typeof l.createdAt === 'string' && l.createdAt.startsWith(monthStr)))
+        );
+        const unpaidDaysCount = empUnpaidLeaves.reduce((sum, l) => sum + Number(l.daysCount || l.days_count || 1), 0);
         const unpaidLeaveDeduction = Number((unpaidDaysCount * dailyRate).toFixed(2));
-        const unexcusedAbsenceDays = 0;
+
+        const unexcusedAbsenceDays = empAttendance.filter(a => a.status === 'absent').length;
         const absenceDeduction = Number((unexcusedAbsenceDays * dailyRate * absenceMultiplier).toFixed(2));
 
-        const insurancePercent = Number(emp.insurancePercent || settings.socialInsurancePercent || 11);
+        const socialInsurancePercent = Number.isFinite(Number(settings.socialInsurancePercent))
+          ? Number(settings.socialInsurancePercent)
+          : 11;
+        const insurancePercent = Number.isFinite(Number(emp.insurancePercent))
+          ? Number(emp.insurancePercent)
+          : socialInsurancePercent;
         const socialInsuranceDeduction = Number(((baseSalary * insurancePercent) / 100).toFixed(2));
 
         const grossEarnings = Number((baseSalary + totalAllowances + overtimeEarnings + totalBonuses + salesCommission).toFixed(2));
         const totalDeductions = Number((latePenaltyAmount + earlyLeavePenaltyAmount + unpaidLeaveDeduction + absenceDeduction + totalAdminPenalties + totalLoans + socialInsuranceDeduction).toFixed(2));
-        const netSalary = Math.max(0, Number((grossEarnings - totalDeductions).toFixed(2)));
+        const rawNetSalary = Number((grossEarnings - totalDeductions).toFixed(2));
+        const shortfall = rawNetSalary < 0 ? Math.abs(rawNetSalary) : 0;
+        const warnings = [];
+        if (shortfall > 0) {
+          warnings.push(`عجز مالي في صافي الراتب بمقدار ${shortfall} ج.م بسبب تجاوز الاستقطاعات (${totalDeductions} ج.م) لإجمالي الاستحقاقات (${grossEarnings} ج.م)`);
+        }
 
         return {
           employeeId: emp.id,
@@ -5232,7 +5297,9 @@ class ApiService {
             socialInsurance: socialInsuranceDeduction,
             total: totalDeductions
           },
-          netSalary
+          netSalary: rawNetSalary,
+          shortfall: shortfall,
+          warnings: warnings
         };
       });
 
@@ -5243,6 +5310,7 @@ class ApiService {
         totalGross: Number(payrollReport.reduce((acc, p) => acc + p.earnings.gross, 0).toFixed(2)),
         totalDeductions: Number(payrollReport.reduce((acc, p) => acc + p.deductions.total, 0).toFixed(2)),
         totalNetPayroll: Number(payrollReport.reduce((acc, p) => acc + p.netSalary, 0).toFixed(2)),
+        totalShortfall: Number(payrollReport.reduce((acc, p) => acc + (p.shortfall || 0), 0).toFixed(2)),
         totalOvertimePaid: Number(payrollReport.reduce((acc, p) => acc + p.earnings.overtimeEarnings, 0).toFixed(2)),
         totalCommissionsPaid: Number(payrollReport.reduce((acc, p) => acc + p.earnings.salesCommission, 0).toFixed(2)),
         totalPenaltiesDeducted: Number(payrollReport.reduce((acc, p) => acc + (p.deductions.latePenalty + p.deductions.adminPenalties), 0).toFixed(2))
