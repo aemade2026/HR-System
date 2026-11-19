@@ -712,7 +712,7 @@ class AuditMiddleware {
       }
 
       const actor = performedBy || this.getCurrentActor(db);
-      const now = new Date();
+      const now = new Date(Date.now());
       const logEntry = {
         id: `AUD-${now.getTime()}-${Math.floor(1000 + Math.random() * 9000)}`,
         timestamp: now.toISOString(),
@@ -1252,20 +1252,115 @@ class ApiService {
   }
 
   /**
+   * تحويل التاريخ إلى صيغة YYYY-MM-DD وفق توقيت القاهرة (Africa/Cairo)
+   */
+  static getCairoDateString(date = new Date()) {
+    try {
+      const formatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Africa/Cairo',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      });
+      return formatter.format(date);
+    } catch (e) {
+      const tzOffset = 2 * 60;
+      const cairoTime = new Date(date.getTime() + (tzOffset + date.getTimezoneOffset()) * 60000);
+      return cairoTime.toISOString().split('T')[0];
+    }
+  }
+
+  /**
+   * تحويل الوقت إلى صيغة HH:mm:ss وفق توقيت القاهرة (Africa/Cairo)
+   */
+  static getCairoTimeString(date = new Date()) {
+    try {
+      const formatter = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Africa/Cairo',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+        hourCycle: 'h23'
+      });
+      return formatter.format(date);
+    } catch (e) {
+      return date.toTimeString().split(' ')[0];
+    }
+  }
+
+  /**
+   * تحويل طابع زمني أو وقت إلى توقيت القاهرة (HH:mm:ss)
+   */
+  static formatToCairoTime(val) {
+    if (!val) return null;
+    if (typeof val === 'string' && /^\d{2}:\d{2}(:\d{2})?$/.test(val.trim())) {
+      return val.trim().length === 5 ? `${val.trim()}:00` : val.trim();
+    }
+    const d = new Date(val);
+    if (isNaN(d.getTime())) {
+      return typeof val === 'string' && val.includes('T') ? val.split('T')[1].slice(0, 8) : String(val);
+    }
+    try {
+      const formatter = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Africa/Cairo',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+        hourCycle: 'h23'
+      });
+      return formatter.format(d);
+    } catch (e) {
+      return typeof val === 'string' && val.includes('T') ? val.split('T')[1].slice(0, 8) : d.toTimeString().split(' ')[0];
+    }
+  }
+
+  /**
+   * تطبيع كائن الحضور والانصراف مع تحويل التوقيت إلى القاهرة واحتساب الساعات من الطوابع الكاملة
+   */
+  static normalizeAttendance(att, empMap = {}) {
+    return this.#normalizeAttendance(att, empMap);
+  }
+
+  /**
    * تطبيع كائن الحضور والانصراف
    */
   static #normalizeAttendance(att, empMap = {}) {
     if (!att) return null;
     const emp = empMap[att.employee_id || att.employeeId] || {};
+
+    const rawIn = att.check_in || att.checkIn;
+    const rawOut = att.check_out || att.checkOut;
+
+    const cairoCheckIn = rawIn ? ApiService.formatToCairoTime(rawIn) : null;
+    const cairoCheckOut = rawOut ? ApiService.formatToCairoTime(rawOut) : null;
+
+    let computedHours = null;
+    if (rawIn && rawOut) {
+      const inD = new Date(rawIn.includes('T') ? rawIn : `${att.date || '2000-01-01'}T${rawIn}`);
+      let outD = new Date(rawOut.includes('T') ? rawOut : `${att.date || '2000-01-01'}T${rawOut}`);
+      if (!rawOut.includes('T') && outD < inD) {
+        outD.setDate(outD.getDate() + 1);
+      }
+      if (!isNaN(inD.getTime()) && !isNaN(outD.getTime()) && outD > inD) {
+        computedHours = Number(((outD - inD) / (1000 * 60 * 60)).toFixed(2));
+      }
+    }
+
+    const actualHours = computedHours !== null
+      ? computedHours
+      : Number(att.actualHours ?? att.actual_hours ?? 0);
+
     return {
       id: att.id,
       employeeId: att.employee_id || att.employeeId,
       employeeName: att.employeeName || emp.fullName || att.employee_id,
       department: att.department || emp.department || '',
       date: att.date,
-      checkIn: att.checkIn || (att.check_in ? (att.check_in.includes('T') ? att.check_in.split('T')[1].slice(0, 8) : att.check_in) : null),
-      checkOut: att.checkOut || (att.check_out ? (att.check_out.includes('T') ? att.check_out.split('T')[1].slice(0, 8) : att.check_out) : null),
-      actualHours: Number(att.actualHours ?? att.actual_hours ?? 0),
+      checkIn: cairoCheckIn,
+      checkOut: cairoCheckOut,
+      actualHours: actualHours,
       lateMinutes: Number(att.lateMinutes ?? att.late_minutes ?? 0),
       earlyLeaveMinutes: Number(att.earlyLeaveMinutes ?? att.early_leave_minutes ?? 0),
       overtimeHours: Number(att.overtimeHours ?? att.overtime_hours ?? 0),
@@ -4312,24 +4407,58 @@ class ApiService {
         return this.#createEnvelope(false, null, errMsg, { message: errMsg });
       }
 
+      if (employee.status === 'suspended') {
+        const msg = 'تم إيقاف هذا الحساب، يرجى مراجعة إدارة الموارد البشرية';
+        return this.#createEnvelope(false, null, msg, { message: msg });
+      }
+
       if (employee.status === 'pending') {
         const msg = 'عفواً، لا يمكن تسجيل الحضور حتى يتم اعتماد حسابك من قبل إدارة الموارد البشرية.';
         return this.#createEnvelope(false, null, msg, { message: msg });
       }
 
-      const now = new Date();
-      const nowTimeStr = now.toTimeString().split(' ')[0]; // HH:mm:ss
-      const todayStr = input.date || (typeof window !== 'undefined' && window.appStore?.state?.currentDate) || now.toISOString().split('T')[0];
+      const now = new Date(Date.now());
+      const nowTimeStr = ApiService.getCairoTimeString(now);
+      const todayStr = ApiService.getCairoDateString(now);
+      const yesterdayDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const yesterdayStr = ApiService.getCairoDateString(yesterdayDate);
 
-      const locationCoords = input.location_coords || {
-        lat: compLat,
-        lng: compLng,
-        label: localSettings.companyAddress || 'المقر الرئيسي المعتمد',
-        accuracy: 10
-      };
+      const isGeofenceRequired = (localSettings.geofenceRequired !== false) && (db.company_settings?.geofenceRequired !== false);
+      const coordsInput = input.location_coords || input.coords;
+      const rawLat = coordsInput?.lat ?? coordsInput?.latitude;
+      const rawLng = coordsInput?.lng ?? coordsInput?.longitude;
+      const hasValidCoords = coordsInput &&
+        rawLat !== null && rawLat !== undefined &&
+        rawLng !== null && rawLng !== undefined &&
+        Number.isFinite(Number(rawLat)) &&
+        Number.isFinite(Number(rawLng)) &&
+        Number(rawLat) !== 0 &&
+        Number(rawLng) !== 0;
+
+      if (isGeofenceRequired && !hasValidCoords) {
+        const failMsg = 'عفواً، لا يمكن تسجيل البصمة بدون إحداثيات موقع جغرافي صالحة (GPS). يرجى تفعيل الموقع والمحاولة مجدداً.';
+        return this.#createEnvelope(false, null, failMsg, {
+          message: failMsg,
+          geofenceMissing: true
+        });
+      }
+
+      const locationCoords = hasValidCoords
+        ? {
+            lat: Number(rawLat),
+            lng: Number(rawLng),
+            label: coordsInput.label || 'موقع مسجل',
+            accuracy: Number(coordsInput.accuracy || 10)
+          }
+        : {
+            lat: compLat,
+            lng: compLng,
+            label: localSettings.companyAddress || 'المقر الرئيسي المعتمد (معفى من GPS)',
+            accuracy: 10
+          };
 
       // 3. تطبيق التحكم الجغرافي (Geofencing Verification) فعلياً
-      if (locationCoords && locationCoords.lat && locationCoords.lng && compLat && compLng) {
+      if (isGeofenceRequired && locationCoords.lat && locationCoords.lng && compLat && compLng) {
         const distanceMeters = this.getDistanceFromLatLonInMeters(
           locationCoords.lat,
           locationCoords.lng,
@@ -4370,9 +4499,39 @@ class ApiService {
         if (localRec) todayRecord = cloneData(localRec);
       }
 
+      // الوردية الليلية: إذا لم يكن هناك تسجيل حضور لليوم وكان هناك سجل مفتوح (checkIn بدون checkOut) من اليوم السابق
+      let isNightShiftCheckOut = false;
+      if (!todayRecord || !todayRecord.checkIn) {
+        let yesterdayRecord = null;
+        if (supabase) {
+          try {
+            const { data: sbYest } = await supabase
+              .from('attendance')
+              .select('*')
+              .eq('company_id', companyId)
+              .eq('employee_id', employee.id)
+              .eq('date', yesterdayStr)
+              .maybeSingle();
+            if (sbYest) {
+              yesterdayRecord = this.#normalizeAttendance(sbYest, { [employee.id]: employee });
+            }
+          } catch (e) {}
+        }
+
+        if (!yesterdayRecord) {
+          const localYest = (db.attendance || []).find(a => a.employeeId === employee.id && a.date === yesterdayStr);
+          if (localYest) yesterdayRecord = cloneData(localYest);
+        }
+
+        if (yesterdayRecord && yesterdayRecord.checkIn && !yesterdayRecord.checkOut) {
+          todayRecord = yesterdayRecord;
+          isNightShiftCheckOut = true;
+        }
+      }
+
       let morningPerm = (db.permissions || []).find(p =>
         p.employeeId === employee.id &&
-        p.date === todayStr &&
+        p.date === (isNightShiftCheckOut ? todayRecord.date : todayStr) &&
         p.permissionType === 'morning_delay' &&
         p.status === 'approved'
       );
@@ -4436,6 +4595,7 @@ class ApiService {
               check_in: now.toISOString(),
               check_in_lat: locationCoords.lat || null,
               check_in_lng: locationCoords.lng || null,
+              late_minutes: netLateMins,
               status: status,
               notes: message
             }], { onConflict: 'company_id,employee_id,date' });
@@ -4485,13 +4645,22 @@ class ApiService {
         // --- تسجيل الانصراف (Check-Out) ---
         punchType = 'check_out';
 
-        const inTime = new Date(`${todayStr}T${todayRecord.checkIn}`);
+        let inTime;
+        if (todayRecord.check_in && todayRecord.check_in.includes('T')) {
+          inTime = new Date(todayRecord.check_in);
+        } else {
+          inTime = new Date(`${todayRecord.date}T${todayRecord.checkIn}`);
+        }
         const workedMs = now - inTime;
-        const actualHours = Number((workedMs / (1000 * 60 * 60)).toFixed(2));
+        const actualHours = Number(Math.max(0, workedMs / (1000 * 60 * 60)).toFixed(2));
 
         const [endH, endM] = (employee.shiftEnd || localSettings.officialCheckOut || '16:00').split(':').map(Number);
-        const shiftEndDate = new Date(now);
+        const [startH, startM] = (employee.shiftStart || localSettings.officialCheckIn || '08:00').split(':').map(Number);
+        const shiftEndDate = new Date(`${todayRecord.date}T00:00:00`);
         shiftEndDate.setHours(endH, endM, 0, 0);
+        if (endH < startH || (endH === startH && endM < startM) || isNightShiftCheckOut) {
+          shiftEndDate.setDate(shiftEndDate.getDate() + 1);
+        }
 
         let overtimeHours = 0;
         let earlyLeaveMinutes = 0;
@@ -4504,7 +4673,7 @@ class ApiService {
           const rawEarlyMins = Math.floor(Math.abs(diffEndMs) / (1000 * 60));
           const earlyPerm = (db.permissions || []).find(p =>
             p.employeeId === employee.id &&
-            p.date === todayStr &&
+            p.date === todayRecord.date &&
             p.permissionType === 'early_leave' &&
             p.status === 'approved'
           );
@@ -4534,10 +4703,14 @@ class ApiService {
                 check_out: now.toISOString(),
                 check_out_lat: locationCoords.lat || null,
                 check_out_lng: locationCoords.lng || null,
+                actual_hours: actualHours,
+                late_minutes: todayRecord.lateMinutes ?? 0,
+                early_leave_minutes: earlyLeaveMinutes,
+                overtime_hours: overtimeHours,
                 notes: todayRecord.notes
               })
               .eq('employee_id', employee.id)
-              .eq('date', todayStr)
+              .eq('date', todayRecord.date)
               .eq('company_id', companyId);
           } catch (sbAttOutErr) {
             console.warn('[Supabase Attendance CheckOut Fallback]:', sbAttOutErr);
@@ -4545,7 +4718,7 @@ class ApiService {
         }
 
         // تحديث LocalDatabase
-        const localIdx = (db.attendance || []).findIndex(a => a.employeeId === employee.id && a.date === todayStr);
+        const localIdx = (db.attendance || []).findIndex(a => a.employeeId === employee.id && a.date === todayRecord.date);
         if (localIdx !== -1) {
           db.attendance[localIdx] = todayRecord;
           LocalDatabase.saveDB(db);
@@ -4570,7 +4743,7 @@ class ApiService {
           punchType: 'check_out',
           employee: cloneData(employee),
           timestamp: nowTimeStr,
-          date: todayStr,
+          date: todayRecord.date,
           status: todayRecord.status,
           actualHours: actualHours,
           earlyLeaveMinutes: earlyLeaveMinutes,
@@ -4598,22 +4771,89 @@ class ApiService {
       // 1. استدعاء السجلات من Supabase أولاً مع فلتر company_id الإجباري
       if (supabase) {
         try {
-          let query = supabase
-            .from('attendance')
-            .select('*')
-            .eq('company_id', companyId)
-            .order('date', { ascending: false });
+          let deptEmpIds = null;
+          if (filters.department && filters.department !== 'all') {
+            const db = LocalDatabase.getDB();
+            const localDeptEmps = (db.employees || [])
+              .filter(e => e.department === filters.department)
+              .map(e => e.id);
+            deptEmpIds = [...localDeptEmps];
 
-          if (filters.date) query = query.eq('date', filters.date);
-          if (filters.employeeId) query = query.eq('employee_id', filters.employeeId);
-          if (filters.status && filters.status !== 'all') query = query.eq('status', filters.status);
+            try {
+              const { data: sbDeptEmps } = await supabase
+                .from('employees')
+                .select('id')
+                .eq('company_id', companyId)
+                .eq('department', filters.department);
+              if (Array.isArray(sbDeptEmps)) {
+                const idSet = new Set([...deptEmpIds, ...sbDeptEmps.map(e => e.id)]);
+                deptEmpIds = Array.from(idSet);
+              }
+            } catch (e) {}
 
-          const { data, error } = await query;
-          if (!error && Array.isArray(data)) {
+            if (deptEmpIds.length === 0) {
+              return this.#createEnvelope(true, []);
+            }
+          }
+
+          const PAGE_SIZE = 1000;
+          let from = 0;
+          let allData = [];
+          let hasMore = true;
+          let fetchSucceeded = false;
+
+          while (hasMore) {
+            let pageQuery = supabase
+              .from('attendance')
+              .select('*')
+              .eq('company_id', companyId)
+              .order('date', { ascending: false });
+
+            if (filters.date) pageQuery = pageQuery.eq('date', filters.date);
+            if (filters.employeeId) pageQuery = pageQuery.eq('employee_id', filters.employeeId);
+            if (filters.status && filters.status !== 'all') pageQuery = pageQuery.eq('status', filters.status);
+
+            if (filters.month) {
+              const [yearStr, monthStr] = filters.month.split('-');
+              const y = parseInt(yearStr, 10);
+              const m = parseInt(monthStr, 10);
+              const startStr = `${y}-${String(m).padStart(2, '0')}-01`;
+              const nextY = m === 12 ? y + 1 : y;
+              const nextM = m === 12 ? 1 : m + 1;
+              const nextStr = `${nextY}-${String(nextM).padStart(2, '0')}-01`;
+              pageQuery = pageQuery.gte('date', startStr).lt('date', nextStr);
+            }
+
+            if (deptEmpIds && deptEmpIds.length > 0) {
+              pageQuery = pageQuery.in('employee_id', deptEmpIds);
+            }
+
+            const { data, error } = await pageQuery.range(from, from + PAGE_SIZE - 1);
+            if (error) {
+              console.warn('[Supabase getAttendanceLogs Page Error]:', error);
+              break;
+            }
+            if (Array.isArray(data)) {
+              allData.push(...data);
+              fetchSucceeded = true;
+              if (data.length < PAGE_SIZE) {
+                hasMore = false;
+              } else {
+                from += PAGE_SIZE;
+              }
+            } else {
+              hasMore = false;
+            }
+          }
+
+          if (fetchSucceeded) {
             const db = LocalDatabase.getDB();
             const empMap = {};
             (db.employees || []).forEach(e => { empMap[e.id] = e; });
-            records = data.map(a => this.#normalizeAttendance(a, empMap));
+            records = allData.map(a => this.#normalizeAttendance(a, empMap));
+            if (filters.department && filters.department !== 'all') {
+              records = records.filter(r => r.department === filters.department);
+            }
           }
         } catch (sbErr) {
           console.warn('[Supabase getAttendanceLogs Fallback]:', sbErr);

@@ -50,9 +50,11 @@ describe('AE HR-SYSTEM Payroll Calculations and Attendance Tests (Batch 2)', () 
     // 1. Check punchAttendance behavior when gracePeriodMinutes = 0
     // Punch attendance 5 minutes after shiftStart (08:05 when shift is 08:00)
     const originalDateNow = Date.now;
+    const originalWinDateNow = window.Date.now;
     const testDate = new Date();
     testDate.setHours(8, 5, 0, 0);
     Date.now = () => testDate.getTime();
+    window.Date.now = () => testDate.getTime();
 
     try {
       const punchRes = await window.ApiService.punchAttendance({
@@ -60,13 +62,14 @@ describe('AE HR-SYSTEM Payroll Calculations and Attendance Tests (Batch 2)', () 
         coords: { latitude: db.settings.company_lat, longitude: db.settings.company_lng }
       });
       assert.strictEqual(punchRes.success, true);
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = punchRes.data.date || window.ApiService.getCairoDateString();
       const attRecord = (window.LocalDatabase.getDB().attendance || []).find(a => a.employeeId === emp.id && a.date === todayStr);
       assert.ok(attRecord, 'Attendance record should be created');
       // With grace 0 and 5 min late, status MUST be 'late', NOT 'present'
       assert.strictEqual(attRecord.status, 'late', 'Status must be late when gracePeriodMinutes is 0 and employee is 5 min late');
     } finally {
       Date.now = originalDateNow;
+      window.Date.now = originalWinDateNow;
     }
 
     // 2. Check calculateMonthlyPayroll late penalty with gracePeriodMinutes = 0
