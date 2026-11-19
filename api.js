@@ -550,6 +550,7 @@ const INITIAL_DATABASE = {
      4. سجل الرقابة والتدقيق الأمني التلقائي (Audit Logs)
      -------------------------------------------------------------------------- */
   audit_logs: [],
+  syncQueue: [],
 
   /* --------------------------------------------------------------------------
      سجلات الموظفين الأصلية (Employees) - الحساب المعتمد للمبرمج الرئيسي فقط
@@ -813,7 +814,7 @@ class LocalDatabase {
       if (typeof localStorage !== 'undefined') {
         // تنظيف وحذف كافة قواعد البيانات التجريبية القديمة لضمان تصفير البيانات
         this.#legacyKeys.forEach(k => {
-          try { localStorage.removeItem(k); } catch (e) {}
+          try { localStorage.removeItem(k); } catch (e) { console.warn('[Storage Cleanup]:', e); }
         });
 
         let data = localStorage.getItem(this.#storageKey);
@@ -843,6 +844,10 @@ class LocalDatabase {
           }
           if (!parsed.role_permissions) {
             parsed.role_permissions = cloneData(INITIAL_DATABASE.role_permissions);
+            needsSave = true;
+          }
+          if (!Array.isArray(parsed.syncQueue)) {
+            parsed.syncQueue = [];
             needsSave = true;
           }
 
@@ -981,6 +986,23 @@ class LocalDatabase {
   static saveDB(data) {
     try {
       if (typeof localStorage !== 'undefined') {
+        try {
+          const raw = localStorage.getItem(this.#storageKey);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed.syncQueue) && parsed.syncQueue.length > 0) {
+              if (!Array.isArray(data.syncQueue)) {
+                data.syncQueue = [...parsed.syncQueue];
+              } else {
+                parsed.syncQueue.forEach(item => {
+                  if (!data.syncQueue.some(q => q.id === item.id)) {
+                    data.syncQueue.push(item);
+                  }
+                });
+              }
+            }
+          }
+        } catch (_) {}
         localStorage.setItem(this.#storageKey, JSON.stringify(data));
       }
     } catch (e) {
@@ -991,15 +1013,77 @@ class LocalDatabase {
   static resetDB() {
     try {
       this.#legacyKeys.forEach(k => {
-        try { localStorage.removeItem(k); } catch (e) {}
+        try { localStorage.removeItem(k); } catch (e) { console.warn('[Storage Cleanup]:', e); }
       });
       if (typeof localStorage !== 'undefined') {
         localStorage.removeItem(this.#storageKey);
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn('[Storage Reset Warning]:', e);
+    }
     const fresh = cloneData(INITIAL_DATABASE);
     this.saveDB(fresh);
     return fresh;
+  }
+
+  static addToSyncQueue(item) {
+    try {
+      const db = this.getDB();
+      if (!Array.isArray(db.syncQueue)) db.syncQueue = [];
+      const queueId = item.id || `SYNC-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+      const idx = db.syncQueue.findIndex(q => q.table === item.table && q.id === queueId);
+      const queueItem = {
+        id: queueId,
+        table: item.table,
+        action: item.action || 'upsert',
+        payload: item.payload,
+        match: item.match || null,
+        context: item.context || '',
+        error: item.error || '',
+        queuedAt: new Date().toISOString(),
+        attempts: 0
+      };
+      if (idx !== -1) {
+        db.syncQueue[idx] = queueItem;
+      } else {
+        db.syncQueue.push(queueItem);
+      }
+      this.saveDB(db);
+    } catch (e) {
+      console.warn('[LocalDatabase addToSyncQueue Error]:', e);
+    }
+  }
+
+  static getSyncQueue() {
+    try {
+      const db = this.getDB();
+      return Array.isArray(db.syncQueue) ? db.syncQueue : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  static clearFromSyncQueue(id) {
+    try {
+      const db = this.getDB();
+      if (!Array.isArray(db.syncQueue)) return;
+      db.syncQueue = db.syncQueue.filter(q => q.id !== id);
+      if (typeof localStorage !== 'undefined') {
+        try {
+          const raw = localStorage.getItem(this.#storageKey);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed.syncQueue)) {
+              parsed.syncQueue = parsed.syncQueue.filter(q => q.id !== id);
+              localStorage.setItem(this.#storageKey, JSON.stringify(parsed));
+            }
+          }
+        } catch (_) {}
+      }
+      this.saveDB(db);
+    } catch (e) {
+      console.warn('[LocalDatabase clearFromSyncQueue Error]:', e);
+    }
   }
 }
 
@@ -1012,6 +1096,122 @@ class LocalDatabase {
  */
 class ApiService {
   static AuditMiddleware = AuditMiddleware;
+
+  /**
+   * دالة موحدة لتنفيذ كافة عمليات الكتابة في Supabase وفحص الأخطاء
+   * @param {Promise} promise استعلام Supabase
+   * @param {string} context سياق العملية لتسجيل الأخطاء والواجهة
+   * @param {object|null} entityInfo تفاصيل الكيان لجدولة المزامنة عند الفشل
+   * @returns {Promise<{success: boolean, data: any, error: any}>}
+   */
+  static async sbWrite(promise, context = '', entityInfo = null) {
+    if (!promise) return { success: true, data: null, error: null };
+    try {
+      const res = await promise;
+      if (!res) return { success: true, data: null, error: null };
+      const { data, error } = res;
+      if (error) {
+        console.error(`[Supabase Write Error] [${context}]:`, error);
+        if (entityInfo) {
+          if (entityInfo.record && typeof entityInfo.record === 'object') {
+            entityInfo.record.pendingSync = true;
+          }
+          LocalDatabase.addToSyncQueue({
+            ...entityInfo,
+            context,
+            error: error.message || String(error)
+          });
+        }
+        if (typeof window !== 'undefined' && typeof window.showToast === 'function') {
+          window.showToast(`تحذير سحابي (${context}): تعذر الحفظ بالسحابة، تم الحفظ محلياً وجدولة المزامنة`, 'warning', 4500);
+        }
+        return { success: false, error, data: null };
+      }
+      return { success: true, data, error: null };
+    } catch (err) {
+      console.error(`[Supabase Write Exception] [${context}]:`, err);
+      if (entityInfo) {
+        if (entityInfo.record && typeof entityInfo.record === 'object') {
+          entityInfo.record.pendingSync = true;
+        }
+        LocalDatabase.addToSyncQueue({
+          ...entityInfo,
+          context,
+          error: err.message || String(err)
+        });
+      }
+      if (typeof window !== 'undefined' && typeof window.showToast === 'function') {
+        window.showToast(`خطأ اتصال بالسحابة (${context}): تم الحفظ محلياً وستتم المزامنة تلقائياً`, 'warning', 4500);
+      }
+      return { success: false, error: err, data: null };
+    }
+  }
+
+  /**
+   * إعادة محاولة مزامنة السجلات العالقة (pendingSync) مع Supabase
+   */
+  static async retryPendingSync() {
+    if (!supabase) return { synced: 0, failed: 0 };
+    const queue = LocalDatabase.getSyncQueue();
+    if (!queue || queue.length === 0) return { synced: 0, failed: 0 };
+
+    let synced = 0;
+    let failed = 0;
+
+    for (const item of [...queue]) {
+      try {
+        let op;
+        const q = supabase.from(item.table);
+        if (item.action === 'insert') {
+          op = q.insert(Array.isArray(item.payload) ? item.payload : [item.payload]);
+        } else if (item.action === 'upsert') {
+          op = q.upsert(Array.isArray(item.payload) ? item.payload : [item.payload], item.options || {});
+        } else if (item.action === 'update') {
+          let uq = q.update(item.payload);
+          if (item.match) {
+            Object.entries(item.match).forEach(([k, v]) => { uq = uq.eq(k, v); });
+          } else if (item.id) {
+            uq = uq.eq('id', item.id);
+          }
+          op = uq;
+        } else if (item.action === 'delete') {
+          let dq = q.delete();
+          if (item.match) {
+            Object.entries(item.match).forEach(([k, v]) => { dq = dq.eq(k, v); });
+          } else if (item.id) {
+            dq = dq.eq('id', item.id);
+          }
+          op = dq;
+        }
+
+        if (op) {
+          const { error } = await op;
+          if (!error) {
+            LocalDatabase.clearFromSyncQueue(item.id);
+            const db = LocalDatabase.getDB();
+            if (item.table && Array.isArray(db[item.table])) {
+              const rec = db[item.table].find(r => r.id === item.id);
+              if (rec) {
+                delete rec.pendingSync;
+                LocalDatabase.saveDB(db);
+              }
+            }
+            synced++;
+          } else {
+            failed++;
+          }
+        }
+      } catch (e) {
+        console.warn(`[Sync Retry Exception] [${item.table}]:`, e);
+        failed++;
+      }
+    }
+
+    if (synced > 0 && typeof window !== 'undefined' && typeof window.showToast === 'function') {
+      window.showToast(`تمت مزامنة ${synced} عملية بنجاح مع السحابة`, 'info', 3000);
+    }
+    return { synced, failed };
+  }
 
   static #createEnvelope(success, data, error = null, extra = {}) {
     return {
@@ -1125,7 +1325,9 @@ class ApiService {
           const session = JSON.parse(raw);
           companyId = session.company_id || session.companyId;
         }
-      } catch (e) {}
+      } catch (e) {
+        console.warn('[Session Parse Error]:', e);
+      }
     }
     if (!companyId) {
       try {
@@ -1632,7 +1834,9 @@ class ApiService {
               .order('created_at', { ascending: false })
               .limit(1);
             if (compData && compData.length > 0) compRecord = compData[0];
-          } catch (e) {}
+          } catch (e) {
+            console.warn('[Login Company Lookup Warning]:', e);
+          }
         }
         if (!compRecord) {
           const db = LocalDatabase.getDB();
@@ -1679,14 +1883,15 @@ class ApiService {
 
           // مزامنة فورية في جدول employees في Supabase إذا لم يكن موجوداً
           if (supabase) {
-            try {
-              const sbPayload = this.#toSupabaseEmployee(emp, targetCompanyId);
-              sbPayload.role = 'admin';
-              sbPayload.status = 'active';
-              await supabase.from('employees').upsert([sbPayload], { onConflict: 'email' });
-            } catch (sbSyncErr) {
-              console.warn('[Sync Manager Emp to Supabase]:', sbSyncErr);
-            }
+            const sbPayload = this.#toSupabaseEmployee(emp, targetCompanyId);
+            sbPayload.role = 'admin';
+            sbPayload.status = 'active';
+            await this.sbWrite(supabase.from('employees').upsert([sbPayload], { onConflict: 'email' }), 'مزامنة حساب المدير', {
+              table: 'employees',
+              id: emp.id,
+              record: emp,
+              action: 'upsert'
+            });
           }
 
           // حفظ محلياً في LocalDatabase لضمان استقرار العمل بلا انقطاع
@@ -1718,13 +1923,13 @@ class ApiService {
         emp.employee_code = 'EMP-0001';
         emp.id = 'aa69f711-7ca3-41dc-b628-42a5dda853f6';
         if (supabase) {
-          supabase.from('employees').update({
+          this.sbWrite(supabase.from('employees').update({
             role: 'programmer',
             department: 'تقنية المعلومات',
             job_title: 'مدير النظام (Super Admin)',
             employee_code: 'EMP-0001',
             status: 'active'
-          }).eq('email', 'aemade2016@gmail.com').then().catch(() => {});
+          }).eq('email', 'aemade2016@gmail.com'), 'تحديث حساب المبرمج');
         }
       }
 
@@ -1897,7 +2102,7 @@ class ApiService {
     try {
       const actor = AuditMiddleware.getCurrentActor();
       if (supabase && supabase.auth) {
-        try { await supabase.auth.signOut(); } catch (e) {}
+        try { await supabase.auth.signOut(); } catch (e) { console.warn('[Supabase SignOut Warning]:', e); }
       }
       if (typeof localStorage !== 'undefined') {
         localStorage.removeItem('JISR_AUTH_SESSION');
@@ -1939,7 +2144,9 @@ class ApiService {
           if (data && data.length > 0) {
             nums = data.map(e => parseInt(String(e.employee_code || e.id).replace('EMP-', ''), 10)).filter(n => !isNaN(n) && n >= 1000);
           }
-        } catch (e) {}
+        } catch (e) {
+          console.warn('[Supabase getNextEmployeeId Warning]:', e);
+        }
       }
 
       const db = LocalDatabase.getDB();
@@ -1971,7 +2178,9 @@ class ApiService {
           if (!error && Array.isArray(data)) {
             pending = data.map(e => this.#normalizeEmployee(e));
           }
-        } catch (e) {}
+        } catch (e) {
+          console.warn('[Supabase getPendingEmployees Warning]:', e);
+        }
       }
 
       // دمج الموظفين المعلقين من LocalDatabase لضمان عدم ضياع أي موظف محلي
@@ -2059,14 +2268,16 @@ class ApiService {
       };
 
       // 1. الحفظ في Supabase أولاً مع عزل company_id
+      let sbSuccess = true;
       if (supabase) {
-        try {
-          const sbPayload = this.#toSupabaseEmployee(newEmp, companyId);
-          sbPayload.status = 'pending';
-          await supabase.from('employees').insert([sbPayload]);
-        } catch (sbErr) {
-          console.warn('[Supabase registerNewEmployee Fallback]:', sbErr);
-        }
+        const sbPayload = this.#toSupabaseEmployee(newEmp, companyId);
+        sbPayload.status = 'pending';
+        const empWriteRes = await this.sbWrite(
+          supabase.from('employees').insert([sbPayload]),
+          'تسجيل انضمام موظف',
+          { table: 'employees', id: newId, record: newEmp, action: 'insert' }
+        );
+        if (!empWriteRes.success) sbSuccess = false;
       }
 
       // 2. الحفظ في LocalDatabase
@@ -2105,8 +2316,8 @@ class ApiService {
       db.requests.unshift(onboardingRequest);
 
       if (supabase) {
-        try {
-          await supabase.from('requests').insert([{
+        const reqWriteRes = await this.sbWrite(
+          supabase.from('requests').insert([{
             id: `REQ-ONB-${newId}`,
             company_id: companyId,
             employee_id: newId,
@@ -2115,10 +2326,11 @@ class ApiService {
             created_at: newEmp.registeredAt,
             reason: `طلب انضمام موظف جديد بشركة (${companyName}) بقسم (${newEmp.department})`,
             details: onboardingRequest.details
-          }]);
-        } catch (sbReqErr) {
-          console.warn('[Supabase onboarding request insert]:', sbReqErr);
-        }
+          }]),
+          'إنشاء طلب انضمام موظف',
+          { table: 'requests', id: `REQ-ONB-${newId}`, record: onboardingRequest, action: 'insert' }
+        );
+        if (!reqWriteRes.success) sbSuccess = false;
       }
 
       LocalDatabase.saveDB(db);
@@ -2137,6 +2349,15 @@ class ApiService {
         details: `تسجيل طلب موظف جديد بقائمة الانتظار: ${newEmp.fullName} (${newId}) بشركة (${companyName}) - قسم ${newEmp.department}`,
         payload: { ...onboardingData, company_id: companyId, company_name: companyName }
       });
+
+      if (!sbSuccess) {
+        return this.#createEnvelope(false, cloneData(newEmp), 'تم تسجيل الطلب محلياً بنجاح وتعذر الرفع السحابي حالياً', {
+          pendingSync: true,
+          employee: cloneData(newEmp),
+          user: cloneData(newEmp),
+          message: `تم حفظ طلبك محلياً بكود (${newId}) بانتظار المزامنة السحابية واعتماد إدارة الموارد البشرية.`
+        });
+      }
 
       return this.#createEnvelope(true, cloneData(newEmp), null, {
         employee: cloneData(newEmp),
@@ -2181,7 +2402,9 @@ class ApiService {
             if (!Array.isArray(db.employees)) db.employees = [];
             db.employees.push(emp);
           }
-        } catch (e) {}
+        } catch (e) {
+          console.warn('[Supabase getPendingEmployee Warning]:', e);
+        }
       }
 
       if (!emp) {
@@ -2237,45 +2460,33 @@ class ApiService {
       }
 
       // 1. التحديث الآمن في Supabase (تجنب الحقول غير الموجودة مثل manager_reply)
+      let sbSuccess = true;
       if (supabase) {
-        try {
-          const sbEmpUpdate = {
-            status: 'active',
-            role: emp.role,
-            department: emp.department,
-            job_title: emp.jobTitle,
-            salary: emp.baseSalary
-          };
-          if (emp.id) {
-            await supabase.from('employees').update(sbEmpUpdate).eq('id', emp.id).eq('company_id', companyId);
-          }
-          if (emp.employee_code) {
-            await supabase.from('employees').update(sbEmpUpdate).eq('employee_code', emp.employee_code).eq('company_id', companyId);
-          }
-          if (id && id !== emp.id && id !== emp.employee_code) {
-            await supabase.from('employees').update(sbEmpUpdate).eq('employee_code', id).eq('company_id', companyId);
-          }
-        } catch (sbEmpErr) {
-          console.warn('[Supabase approvePendingEmployee emp]:', sbEmpErr);
-        }
+        const sbEmpUpdate = {
+          status: 'active',
+          role: emp.role,
+          department: emp.department,
+          job_title: emp.jobTitle,
+          salary: emp.baseSalary
+        };
+        const empWriteRes = await this.sbWrite(
+          supabase.from('employees').update(sbEmpUpdate).eq('id', emp.id || id).eq('company_id', companyId),
+          'اعتماد موظف',
+          { table: 'employees', id: emp.id || id, record: emp, action: 'update', payload: sbEmpUpdate, match: { id: emp.id || id, company_id: companyId } }
+        );
+        if (!empWriteRes.success) sbSuccess = false;
 
-        try {
-          const reqUpdatePayload = {
-            status: 'approved',
-            review_notes: `تم اعتماد وتفعيل الحساب برتبة (${this.getRoleArabicTitle(emp.role)}) وراتب أساسي (${emp.baseSalary} ج.م)`,
-            reviewed_at: new Date().toISOString()
-          };
-          await supabase.from('requests').update(reqUpdatePayload).eq('id', `REQ-ONB-${id}`).eq('company_id', companyId);
-          if (emp.id) {
-            await supabase.from('requests').update(reqUpdatePayload).eq('id', `REQ-ONB-${emp.id}`).eq('company_id', companyId);
-            await supabase.from('requests').update(reqUpdatePayload).eq('employee_id', emp.id).eq('request_type', 'onboarding').eq('company_id', companyId);
-          }
-          if (emp.employee_code) {
-            await supabase.from('requests').update(reqUpdatePayload).eq('employee_id', emp.employee_code).eq('request_type', 'onboarding').eq('company_id', companyId);
-          }
-        } catch (sbReqErr) {
-          console.warn('[Supabase approvePendingEmployee req]:', sbReqErr);
-        }
+        const reqUpdatePayload = {
+          status: 'approved',
+          review_notes: `تم اعتماد وتفعيل الحساب برتبة (${this.getRoleArabicTitle(emp.role)}) وراتب أساسي (${emp.baseSalary} ج.م)`,
+          reviewed_at: new Date().toISOString()
+        };
+        const reqWriteRes = await this.sbWrite(
+          supabase.from('requests').update(reqUpdatePayload).eq('id', `REQ-ONB-${emp.id || id}`).eq('company_id', companyId),
+          'تحديث طلب اعتماد موظف',
+          { table: 'requests', id: `REQ-ONB-${emp.id || id}`, action: 'update', payload: reqUpdatePayload, match: { id: `REQ-ONB-${emp.id || id}`, company_id: companyId } }
+        );
+        if (!reqWriteRes.success) sbSuccess = false;
       }
 
       LocalDatabase.saveDB(db);
@@ -2288,6 +2499,15 @@ class ApiService {
         details: `اعتماد وتفعيل حساب الموظف (${emp.fullName} - ${emp.id}) بشركة (${companyId}) برتبة: ${this.getRoleArabicTitle(emp.role)} وراتب أساسي: ${emp.baseSalary} ج.م`,
         payload: { ...approvalData, company_id: companyId }
       });
+
+      if (!sbSuccess) {
+        return this.#createEnvelope(false, cloneData(emp), 'تم اعتماد الموظف محلياً وتعذر التحديث السحابي حالياً', {
+          pendingSync: true,
+          employee: cloneData(emp),
+          user: cloneData(emp),
+          message: `تم اعتماد حساب الموظف (${emp.fullName}) محلياً، وبانتظار المزامنة السحابية.`
+        });
+      }
 
       return this.#createEnvelope(true, cloneData(emp), null, {
         employee: cloneData(emp),
@@ -2323,35 +2543,26 @@ class ApiService {
       const [removed] = db.employees.splice(idx, 1);
 
       // 1. الحذف الآمن من Supabase
+      let sbSuccess = true;
       if (supabase) {
-        try {
-          if (removed.id) {
-            await supabase.from('employees').delete().eq('id', removed.id).eq('company_id', companyId);
-          }
-          if (removed.employee_code) {
-            await supabase.from('employees').delete().eq('employee_code', removed.employee_code).eq('company_id', companyId);
-          }
-        } catch (sbErr) {
-          console.warn('[Supabase rejectPendingEmployee emp]:', sbErr);
-        }
+        const empWriteRes = await this.sbWrite(
+          supabase.from('employees').delete().eq('id', removed.id || id).eq('company_id', companyId),
+          'حذف موظف مرفوض',
+          { table: 'employees', id: removed.id || id, action: 'delete', match: { id: removed.id || id, company_id: companyId } }
+        );
+        if (!empWriteRes.success) sbSuccess = false;
 
-        try {
-          const rejUpdate = {
-            status: 'rejected',
-            review_notes: 'تم رفض طلب التسجيل من قبل الإدارة',
-            reviewed_at: new Date().toISOString()
-          };
-          await supabase.from('requests').update(rejUpdate).eq('id', `REQ-ONB-${id}`).eq('company_id', companyId);
-          if (removed.id) {
-            await supabase.from('requests').update(rejUpdate).eq('id', `REQ-ONB-${removed.id}`).eq('company_id', companyId);
-            await supabase.from('requests').update(rejUpdate).eq('employee_id', removed.id).eq('request_type', 'onboarding').eq('company_id', companyId);
-          }
-          if (removed.employee_code) {
-            await supabase.from('requests').update(rejUpdate).eq('employee_id', removed.employee_code).eq('request_type', 'onboarding').eq('company_id', companyId);
-          }
-        } catch (sbReqErr) {
-          console.warn('[Supabase rejectPendingEmployee req]:', sbReqErr);
-        }
+        const rejUpdate = {
+          status: 'rejected',
+          review_notes: 'تم رفض طلب التسجيل من قبل الإدارة',
+          reviewed_at: new Date().toISOString()
+        };
+        const reqWriteRes = await this.sbWrite(
+          supabase.from('requests').update(rejUpdate).eq('id', `REQ-ONB-${removed.id || id}`).eq('company_id', companyId),
+          'تحديث طلب رفض موظف',
+          { table: 'requests', id: `REQ-ONB-${removed.id || id}`, action: 'update', payload: rejUpdate, match: { id: `REQ-ONB-${removed.id || id}`, company_id: companyId } }
+        );
+        if (!reqWriteRes.success) sbSuccess = false;
       }
 
       // تحديث حالة طلب الاعتماد في LocalDatabase
@@ -2378,6 +2589,13 @@ class ApiService {
         targetId: id,
         details: `رفض طلب تسجيل الموظف وحذف بياناته: ${removed.fullName} (${removed.id}) بشركة (${companyId})`
       });
+
+      if (!sbSuccess) {
+        return this.#createEnvelope(false, cloneData(removed), 'تم رفض الموظف محلياً وتعذر التحديث السحابي حالياً', {
+          pendingSync: true,
+          message: 'تم رفض طلب التسجيل محلياً، وبانتظار المزامنة السحابية.'
+        });
+      }
 
       return this.#createEnvelope(true, cloneData(removed), null, {
         message: 'تم رفض طلب التسجيل وإلغاء بيانات الموظف بنجاح'
@@ -2510,20 +2728,23 @@ class ApiService {
       if (newSettings.allowed_radius_meters && db.company_settings) db.company_settings.allowed_radius_meters = newSettings.allowed_radius_meters;
 
       // 1. تحديث جدول companies في Supabase مع عزل المستأجر الحالي
+      let sbSuccess = true;
       if (supabase) {
-        try {
-          await supabase
+        const companyUpdatePayload = {
+          name: newSettings.companyName,
+          company_lat: newSettings.company_lat,
+          company_lng: newSettings.company_lng,
+          allowed_radius_meters: newSettings.allowed_radius_meters
+        };
+        const writeRes = await this.sbWrite(
+          supabase
             .from('companies')
-            .update({
-              name: newSettings.companyName,
-              company_lat: newSettings.company_lat,
-              company_lng: newSettings.company_lng,
-              allowed_radius_meters: newSettings.allowed_radius_meters
-            })
-            .eq('id', companyId);
-        } catch (sbErr) {
-          console.warn('[Supabase updateSettings Fallback]:', sbErr);
-        }
+            .update(companyUpdatePayload)
+            .eq('id', companyId),
+          'تحديث إعدادات الشركة',
+          { table: 'companies', id: companyId, action: 'update', payload: companyUpdatePayload, match: { id: companyId } }
+        );
+        if (!writeRes.success) sbSuccess = false;
       }
 
       LocalDatabase.saveDB(db);
@@ -2536,6 +2757,13 @@ class ApiService {
         details: `تحديث قواعد وإعدادات مسير الرواتب والتحكم الجغرافي لشركة (${companyId})`,
         payload: { ...newSettings, company_id: companyId }
       });
+
+      if (!sbSuccess) {
+        return this.#createEnvelope(false, cloneData(db.settings), 'تم حفظ الإعدادات محلياً وتعذر الحفظ السحابي حالياً', {
+          pendingSync: true,
+          message: 'تم حفظ الإعدادات محلياً بانتظار المزامنة السحابية.'
+        });
+      }
 
       return this.#createEnvelope(true, cloneData(db.settings), null, { message: 'تم تحديث الإعدادات بنجاح' });
     } catch (err) {
@@ -2611,20 +2839,23 @@ class ApiService {
       if (newSettings.commercialRegister) db.settings.commercialRegister = newSettings.commercialRegister;
 
       // 1. تحديث جدول companies في Supabase أولاً
+      let sbSuccess = true;
       if (supabase) {
-        try {
-          await supabase
+        const companyUpdatePayload = {
+          name: newSettings.companyName,
+          company_lat: newSettings.company_lat,
+          company_lng: newSettings.company_lng,
+          allowed_radius_meters: newSettings.allowed_radius_meters
+        };
+        const writeRes = await this.sbWrite(
+          supabase
             .from('companies')
-            .update({
-              name: newSettings.companyName,
-              company_lat: newSettings.company_lat,
-              company_lng: newSettings.company_lng,
-              allowed_radius_meters: newSettings.allowed_radius_meters
-            })
-            .eq('id', companyId);
-        } catch (sbErr) {
-          console.warn('[Supabase updateCompanySettings Fallback]:', sbErr);
-        }
+            .update(companyUpdatePayload)
+            .eq('id', companyId),
+          'تحديث هوية الشركة',
+          { table: 'companies', id: companyId, action: 'update', payload: companyUpdatePayload, match: { id: companyId } }
+        );
+        if (!writeRes.success) sbSuccess = false;
       }
 
       LocalDatabase.saveDB(db);
@@ -2637,6 +2868,13 @@ class ApiService {
         details: `تحديث بيانات الشركة الرسمية (${db.company_settings.companyName}) لشركة (${companyId})`,
         payload: { ...newSettings, company_id: companyId }
       });
+
+      if (!sbSuccess) {
+        return this.#createEnvelope(false, cloneData(db.company_settings), 'تم تحديث بيانات الشركة محلياً وتعذر الحفظ السحابي حالياً', {
+          pendingSync: true,
+          message: 'تم تحديث بيانات الشركة محلياً بانتظار المزامنة السحابية.'
+        });
+      }
 
       return this.#createEnvelope(true, cloneData(db.company_settings), null, {
         message: 'تم تحديث بيانات وهوية الشركة بنجاح'
@@ -2758,29 +2996,26 @@ class ApiService {
       };
 
       // 2. الإدراج أو التحديث المباشر في Supabase مع مطابقة أسماء الأعمدة 100%
+      let sbSuccess = true;
       if (supabase) {
-        try {
-          const sbPayload = {
-            id: companyId,
-            name: companyName,
-            tax_number: taxNumber || null,
-            manager_name: managerName,
-            manager_phone: phone || null,
-            manager_email: email || null,
-            manager_pin: pin,
-            status: 'pending',
-            subscription_plan: 'basic',
-            is_active: true
-          };
-          const { error: sbErr } = await supabase.from('companies').upsert([sbPayload], { onConflict: 'id' });
-          if (sbErr) {
-            console.error('[Supabase registerNewTenant Upsert Error]:', sbErr.message || sbErr);
-          } else {
-            console.log('[Supabase registerNewTenant Success]:', companyId, companyName);
-          }
-        } catch (sbErr) {
-          console.warn('[Supabase registerNewTenant Fallback]:', sbErr);
-        }
+        const sbPayload = {
+          id: companyId,
+          name: companyName,
+          tax_number: taxNumber || null,
+          manager_name: managerName,
+          manager_phone: phone || null,
+          manager_email: email || null,
+          manager_pin: pin,
+          status: 'pending',
+          subscription_plan: 'basic',
+          is_active: true
+        };
+        const writeRes = await this.sbWrite(
+          supabase.from('companies').upsert([sbPayload], { onConflict: 'id' }),
+          'تسجيل شركة جديدة',
+          { table: 'companies', id: companyId, record: newTenant, action: 'upsert', payload: sbPayload, options: { onConflict: 'id' } }
+        );
+        if (!writeRes.success) sbSuccess = false;
       }
 
       // 3. الحفظ في LocalDatabase.companies
@@ -2800,6 +3035,13 @@ class ApiService {
         details: `تسجيل شركة جديدة بقائمة الانتظار: ${newTenant.companyName} (المدير: ${newTenant.managerName} - ${newTenant.phone})`,
         payload: newTenant
       });
+
+      if (!sbSuccess) {
+        return this.#createEnvelope(false, cloneData(newTenant), 'تم تسجيل الشركة محلياً وتعذر الحفظ السحابي حالياً', {
+          pendingSync: true,
+          message: 'تم استلام طلب تسجيل شركتكم محلياً، بانتظار المزامنة السحابية والمراجعة.'
+        });
+      }
 
       return this.#createEnvelope(true, cloneData(newTenant), null, {
         message: 'تم استلام طلب تسجيل شركتكم بنجاح! طلبكم قيد المراجعة والاعتماد الفوري من قبل الإدارة وسيتم تفعيل حسابكم فوراً.'
@@ -2947,7 +3189,9 @@ class ApiService {
             };
             db.companies.push(company);
           }
-        } catch (e) {}
+        } catch (e) {
+          console.warn('[Supabase getTenantCompany Warning]:', e);
+        }
       }
 
       if (!company) {
@@ -2955,12 +3199,14 @@ class ApiService {
       }
 
       // 1. تحديث حالة الشركة إلى active في Supabase
+      let sbSuccess = true;
       if (supabase) {
-        try {
-          await supabase.from('companies').update({ status: 'active', is_active: true }).eq('id', companyId);
-        } catch (sbErr) {
-          console.warn('[Supabase approveTenant status error]:', sbErr);
-        }
+        const compRes = await this.sbWrite(
+          supabase.from('companies').update({ status: 'active', is_active: true }).eq('id', companyId),
+          'تفعيل حساب الشركة',
+          { table: 'companies', id: companyId, action: 'update', payload: { status: 'active', is_active: true }, match: { id: companyId } }
+        );
+        if (!compRes.success) sbSuccess = false;
       }
 
       // 2. تحديث حالة الشركة محلياً
@@ -2998,14 +3244,15 @@ class ApiService {
 
       // 4. إدراج حساب المدير في جدول employees في Supabase
       if (supabase) {
-        try {
-          const sbPayload = this.#toSupabaseEmployee(managerEmp, companyId);
-          sbPayload.role = 'admin';
-          sbPayload.status = 'active';
-          await supabase.from('employees').insert([sbPayload]);
-        } catch (sbErr) {
-          console.warn('[Supabase approveTenant Manager Insert Fallback]:', sbErr);
-        }
+        const sbPayload = this.#toSupabaseEmployee(managerEmp, companyId);
+        sbPayload.role = 'admin';
+        sbPayload.status = 'active';
+        const empRes = await this.sbWrite(
+          supabase.from('employees').insert([sbPayload]),
+          'إنشاء حساب مدير الشركة المعتمدة',
+          { table: 'employees', id: managerEmp.id, record: managerEmp, action: 'insert', payload: sbPayload }
+        );
+        if (!empRes.success) sbSuccess = false;
       }
 
       // 5. حفظ الموظف الجديد في LocalDatabase
@@ -3024,6 +3271,13 @@ class ApiService {
         details: `اعتماد وتفعيل الشركة: "${company.companyName}" وإنشاء حساب المدير العام المسؤول: ${managerName} (${managerId}) بصلاحية Admin`,
         payload: { companyId, managerEmp }
       });
+
+      if (!sbSuccess) {
+        return this.#createEnvelope(false, { company, manager: managerEmp }, 'تم اعتماد وتفعيل الشركة محلياً وتعذر الحفظ السحابي حالياً', {
+          pendingSync: true,
+          message: `تم اعتماد الشركة "${company.companyName}" محلياً بانتظار المزامنة السحابية.`
+        });
+      }
 
       return this.#createEnvelope(true, { company, manager: managerEmp }, null, {
         message: `تم اعتماد وتفعيل الشركة "${company.companyName}" بنجاح! تم إنشاء حساب المدير العام (${managerName}) برتبة Admin وبكود (${managerId}).`
@@ -3046,13 +3300,21 @@ class ApiService {
       const compName = comp?.companyName || companyId;
 
       // 1. الحذف من Supabase
+      let sbSuccess = true;
       if (supabase) {
-        try {
-          await supabase.from('companies').delete().eq('id', companyId);
-          await supabase.from('employees').delete().eq('company_id', companyId);
-        } catch (sbErr) {
-          console.warn('[Supabase rejectTenant error]:', sbErr);
-        }
+        const r1 = await this.sbWrite(
+          supabase.from('companies').delete().eq('id', companyId),
+          'حذف شركة',
+          { table: 'companies', id: companyId, action: 'delete', match: { id: companyId } }
+        );
+        if (!r1.success) sbSuccess = false;
+
+        const r2 = await this.sbWrite(
+          supabase.from('employees').delete().eq('company_id', companyId),
+          'حذف موظفي الشركة',
+          { table: 'employees', action: 'delete', match: { company_id: companyId } }
+        );
+        if (!r2.success) sbSuccess = false;
       }
 
       // 2. الحذف من LocalDatabase
@@ -3074,6 +3336,13 @@ class ApiService {
         details: `رفض وحذف الشركة: "${compName}" (${companyId}) وجميع بياناتها من النظام`,
         payload: { companyId }
       });
+
+      if (!sbSuccess) {
+        return this.#createEnvelope(false, null, 'تم حذف الشركة محلياً وتعذر الحذف السحابي حالياً', {
+          pendingSync: true,
+          message: `تم حذف الشركة "${compName}" محلياً بانتظار المزامنة السحابية.`
+        });
+      }
 
       return this.#createEnvelope(true, null, null, {
         message: `تم رفض وحذف الشركة "${compName}" بنجاح`
@@ -3157,7 +3426,9 @@ class ApiService {
           if (!error && Array.isArray(data) && data.length > 0) {
             list = data;
           }
-        } catch (e) {}
+        } catch (e) {
+          console.warn('[Supabase getDepartments Warning]:', e);
+        }
       }
 
       if (list === null) {
@@ -3193,7 +3464,9 @@ class ApiService {
             .or(`id.eq.${idOrName},name.eq.${idOrName}`)
             .maybeSingle();
           if (data) dept = data;
-        } catch (e) {}
+        } catch (e) {
+          console.warn('[Supabase getDepartmentById Warning]:', e);
+        }
       }
 
       if (!dept) {
@@ -3237,12 +3510,14 @@ class ApiService {
       };
 
       // 1. الإدراج في Supabase
+      let sbSuccess = true;
       if (supabase) {
-        try {
-          await supabase.from('departments').insert([newDept]);
-        } catch (sbErr) {
-          console.warn('[Supabase createDepartment Fallback]:', sbErr);
-        }
+        const writeRes = await this.sbWrite(
+          supabase.from('departments').insert([newDept]),
+          'إنشاء قسم جديد',
+          { table: 'departments', id: newId, record: newDept, action: 'insert', payload: newDept }
+        );
+        if (!writeRes.success) sbSuccess = false;
       }
 
       // 2. التحديث في LocalDatabase
@@ -3261,6 +3536,14 @@ class ApiService {
         details: `إضافة قسم إداري جديد: ${name} (كود: ${newDept.code}) بشركة (${companyId})`,
         payload: newDept
       });
+
+      if (!sbSuccess) {
+        return this.#createEnvelope(false, cloneData(newDept), 'تم إنشاء القسم محلياً وتعذر الحفظ السحابي حالياً', {
+          pendingSync: true,
+          department: cloneData(newDept),
+          message: `تم إنشاء قسم (${name}) محلياً بانتظار المزامنة السحابية.`
+        });
+      }
 
       return this.#createEnvelope(true, cloneData(newDept), null, {
         department: cloneData(newDept),
@@ -3290,23 +3573,26 @@ class ApiService {
       if (deptData.managerName !== undefined) dept.managerName = deptData.managerName;
 
       // 1. التحديث في Supabase مع فلتر company_id الإجباري
+      let sbSuccess = true;
       if (supabase) {
-        try {
-          await supabase
+        const updatePayload = {
+          name: newName,
+          nameEn: dept.nameEn,
+          code: dept.code,
+          description: dept.description,
+          managerId: dept.managerId,
+          managerName: dept.managerName
+        };
+        const writeRes = await this.sbWrite(
+          supabase
             .from('departments')
-            .update({
-              name: newName,
-              nameEn: dept.nameEn,
-              code: dept.code,
-              description: dept.description,
-              managerId: dept.managerId,
-              managerName: dept.managerName
-            })
+            .update(updatePayload)
             .eq('id', dept.id)
-            .eq('company_id', companyId);
-        } catch (sbErr) {
-          console.warn('[Supabase updateDepartment Fallback]:', sbErr);
-        }
+            .eq('company_id', companyId),
+          'تحديث بيانات القسم',
+          { table: 'departments', id: dept.id, record: dept, action: 'update', payload: updatePayload, match: { id: dept.id, company_id: companyId } }
+        );
+        if (!writeRes.success) sbSuccess = false;
       }
 
       // تحديث أسماء الأقسام للموظفين والطلبات في حال تغير اسم القسم
@@ -3334,6 +3620,14 @@ class ApiService {
         payload: { deptId, deptData, company_id: companyId }
       });
 
+      if (!sbSuccess) {
+        return this.#createEnvelope(false, cloneData(dept), 'تم تحديث بيانات القسم محلياً وتعذر التحديث السحابي حالياً', {
+          pendingSync: true,
+          department: cloneData(dept),
+          message: `تم تحديث بيانات قسم (${newName}) محلياً بانتظار المزامنة السحابية.`
+        });
+      }
+
       return this.#createEnvelope(true, cloneData(dept), null, {
         department: cloneData(dept),
         message: `تم تحديث بيانات قسم (${newName}) بنجاح`
@@ -3358,16 +3652,18 @@ class ApiService {
       }
 
       // 1. الحذف من Supabase
+      let sbSuccess = true;
       if (supabase) {
-        try {
-          await supabase
+        const writeRes = await this.sbWrite(
+          supabase
             .from('departments')
             .delete()
             .eq('id', target.id)
-            .eq('company_id', companyId);
-        } catch (sbErr) {
-          console.warn('[Supabase deleteDepartment Fallback]:', sbErr);
-        }
+            .eq('company_id', companyId),
+          'حذف قسم إداري',
+          { table: 'departments', id: target.id, action: 'delete', match: { id: target.id, company_id: companyId } }
+        );
+        if (!writeRes.success) sbSuccess = false;
       }
 
       db.departments.splice(idx, 1);
@@ -3383,6 +3679,13 @@ class ApiService {
         targetId: target.id,
         details: `حذف قسم إداري: ${target.name} (${target.id}) بشركة (${companyId})`
       });
+
+      if (!sbSuccess) {
+        return this.#createEnvelope(false, { id: target.id, name: target.name }, 'تم حذف القسم محلياً وتعذر الحذف السحابي حالياً', {
+          pendingSync: true,
+          message: `تم حذف قسم (${target.name}) محلياً بانتظار المزامنة السحابية.`
+        });
+      }
 
       return this.#createEnvelope(true, { id: target.id, name: target.name }, null, {
         message: `تم حذف قسم (${target.name}) بنجاح`
@@ -3588,7 +3891,9 @@ class ApiService {
             (db.employees || []).forEach(e => { empMap[e.id] = e; });
             req = this.#normalizeRequest(data, empMap);
           }
-        } catch (e) {}
+        } catch (e) {
+          console.warn('[Supabase getRequestById Warning]:', e);
+        }
       }
 
       if (!req) {
@@ -3643,20 +3948,23 @@ class ApiService {
       };
 
       // 1. الإدراج في Supabase أولاً مع حقل company_id الإجباري
+      let sbSuccess = true;
       if (supabase) {
-        try {
-          await supabase.from('requests').insert([{
-            id: newId,
-            company_id: companyId,
-            employee_id: emp.id,
-            request_type: type,
-            details: newRequest,
-            status: newRequest.status,
-            created_at: submittedAt
-          }]);
-        } catch (sbErr) {
-          console.warn('[Supabase createRequest Fallback]:', sbErr);
-        }
+        const sbReq = {
+          id: newId,
+          company_id: companyId,
+          employee_id: emp.id,
+          request_type: type,
+          details: newRequest,
+          status: newRequest.status,
+          created_at: submittedAt
+        };
+        const writeRes = await this.sbWrite(
+          supabase.from('requests').insert([sbReq]),
+          'إنشاء طلب جديد',
+          { table: 'requests', id: newId, record: newRequest, action: 'insert', payload: sbReq }
+        );
+        if (!writeRes.success) sbSuccess = false;
       }
 
       // 2. المزامنة مع LocalDatabase
@@ -3694,6 +4002,14 @@ class ApiService {
         payload: { ...newRequest, company_id: companyId }
       });
 
+      if (!sbSuccess) {
+        return this.#createEnvelope(false, cloneData(newRequest), 'تم تسجيل الطلب محلياً وتعذر الحفظ السحابي حالياً', {
+          pendingSync: true,
+          request: cloneData(newRequest),
+          message: `تم تقديم طلب (${typeName}) محلياً بنجاح برقم (${newId}) بانتظار المزامنة السحابية.`
+        });
+      }
+
       return this.#createEnvelope(true, cloneData(newRequest), null, {
         request: cloneData(newRequest),
         message: `تم تقديم طلب (${typeName}) بنجاح وهو قيد المراجعة برقم (${newId})`
@@ -3719,21 +4035,24 @@ class ApiService {
       req.reviewNotes = req.manager_reply;
 
       // 1. التحديث في Supabase مع فلتر company_id الإجباري
+      let sbSuccess = true;
       if (supabase) {
-        try {
-          await supabase
+        const updatePayload = {
+          status: status,
+          reviewed_by: req.reviewedBy,
+          review_notes: req.reviewNotes,
+          details: req
+        };
+        const writeRes = await this.sbWrite(
+          supabase
             .from('requests')
-            .update({
-              status: status,
-              reviewed_by: req.reviewedBy,
-              review_notes: req.reviewNotes,
-              details: req
-            })
+            .update(updatePayload)
             .eq('id', requestId)
-            .eq('company_id', companyId);
-        } catch (sbErr) {
-          console.warn('[Supabase updateRequestStatus Fallback]:', sbErr);
-        }
+            .eq('company_id', companyId),
+          'تحديث حالة الطلب',
+          { table: 'requests', id: requestId, record: req, action: 'update', payload: updatePayload, match: { id: requestId, company_id: companyId } }
+        );
+        if (!writeRes.success) sbSuccess = false;
       }
 
       // 2. مزامنة حالة الاعتماد مع الجداول المرتبطة
@@ -3791,6 +4110,14 @@ class ApiService {
         payload: { requestId, status, reviewData, company_id: companyId }
       });
 
+      if (!sbSuccess) {
+        return this.#createEnvelope(false, cloneData(req), 'تم تحديث حالة الطلب محلياً وتعذر التحديث السحابي حالياً', {
+          pendingSync: true,
+          request: cloneData(req),
+          message: `تم ${actionTypeName} الطلب محلياً بانتظار المزامنة السحابية.`
+        });
+      }
+
       return this.#createEnvelope(true, cloneData(req), null, {
         request: cloneData(req),
         message: `تم ${actionTypeName} الطلب بنجاح`
@@ -3815,16 +4142,18 @@ class ApiService {
       const db = LocalDatabase.getDB();
 
       // 1. الحذف من Supabase مع فلتر company_id الإجباري
+      let sbSuccess = true;
       if (supabase) {
-        try {
-          await supabase
+        const writeRes = await this.sbWrite(
+          supabase
             .from('requests')
             .delete()
             .eq('id', requestId)
-            .eq('company_id', companyId);
-        } catch (sbErr) {
-          console.warn('[Supabase deleteRequest Fallback]:', sbErr);
-        }
+            .eq('company_id', companyId),
+          'حذف طلب',
+          { table: 'requests', id: requestId, action: 'delete', match: { id: requestId, company_id: companyId } }
+        );
+        if (!writeRes.success) sbSuccess = false;
       }
 
       const idx = (db.requests || []).findIndex(r => r.id === requestId);
@@ -3837,6 +4166,13 @@ class ApiService {
           target: 'requests',
           targetId: requestId,
           details: `حذف طلب (${removed.typeName} - ${removed.id}) للموظف: ${removed.employeeName} بشركة (${companyId})`
+        });
+      }
+
+      if (!sbSuccess) {
+        return this.#createEnvelope(false, { id: requestId }, 'تم حذف الطلب محلياً وتعذر الحذف السحابي حالياً', {
+          pendingSync: true,
+          message: 'تم حذف الطلب محلياً بانتظار المزامنة السحابية.'
         });
       }
 
@@ -3977,7 +4313,9 @@ class ApiService {
             .eq('company_id', companyId)
             .maybeSingle();
           if (data) emp = this.#normalizeEmployee(data);
-        } catch (e) {}
+        } catch (e) {
+          console.warn('[Supabase getEmployeeById Warning]:', e);
+        }
       }
 
       if (!emp) {
@@ -4013,7 +4351,9 @@ class ApiService {
             .or(`id.eq.${query},pin.eq.${query}`)
             .maybeSingle();
           if (data) emp = this.#normalizeEmployee(data);
-        } catch (e) {}
+        } catch (e) {
+          console.warn('[Supabase getEmployeeById Warning]:', e);
+        }
       }
 
       if (!emp) {
@@ -4070,13 +4410,15 @@ class ApiService {
       });
 
       // 1. الإدراج في Supabase أولاً مع حقل company_id
+      let sbSuccess = true;
       if (supabase) {
-        try {
-          const sbPayload = this.#toSupabaseEmployee(normalized, companyId);
-          await supabase.from('employees').insert([sbPayload]);
-        } catch (sbErr) {
-          console.warn('[Supabase createEmployee Fallback]:', sbErr);
-        }
+        const sbPayload = this.#toSupabaseEmployee(normalized, companyId);
+        const writeRes = await this.sbWrite(
+          supabase.from('employees').insert([sbPayload]),
+          'إضافة موظف جديد',
+          { table: 'employees', id: newId, record: normalized, action: 'insert', payload: sbPayload }
+        );
+        if (!writeRes.success) sbSuccess = false;
       }
 
       // 2. الحفظ في LocalDatabase
@@ -4092,6 +4434,13 @@ class ApiService {
         details: `إضافة موظف جديد: ${normalized.fullName} (${newId}) بشركة (${companyId}) - قسم ${normalized.department}`,
         payload: { ...empData, company_id: companyId }
       });
+
+      if (!sbSuccess) {
+        return this.#createEnvelope(false, cloneData(normalized), 'تمت إضافة الموظف محلياً وتعذر الحفظ السحابي حالياً', {
+          pendingSync: true,
+          message: 'تمت إضافة الموظف محلياً بانتظار المزامنة السحابية.'
+        });
+      }
 
       return this.#createEnvelope(true, cloneData(normalized), null, { message: 'تمت إضافة الموظف بنجاح' });
     } catch (err) {
@@ -4155,35 +4504,37 @@ class ApiService {
       }
 
       // 1. التحديث في Supabase أولاً مع فلتر company_id الإجباري
+      let sbSuccess = true;
       if (supabase) {
-        try {
-          const sbUpdate = {};
-          if (safeFields.pin) sbUpdate.pin = String(safeFields.pin).trim();
-          if (safeFields.role) sbUpdate.role = safeFields.role;
-          if (safeFields.status) sbUpdate.status = safeFields.status;
-          if (safeFields.department) sbUpdate.department = safeFields.department;
-          if (safeFields.jobTitle || safeFields.job_title) sbUpdate.job_title = safeFields.jobTitle || safeFields.job_title;
-          if (safeFields.baseSalary || safeFields.salary) sbUpdate.salary = Number(safeFields.baseSalary || safeFields.salary);
-          if (safeFields.email) sbUpdate.email = safeFields.email;
-          if (safeFields.phone) sbUpdate.phone = safeFields.phone;
-          if (safeFields.fullName) {
-            const parts = safeFields.fullName.trim().split(' ');
-            sbUpdate.first_name = parts[0] || '';
-            sbUpdate.last_name = parts.slice(1).join(' ') || '';
-          }
+        const sbUpdate = {};
+        if (safeFields.pin) sbUpdate.pin = String(safeFields.pin).trim();
+        if (safeFields.role) sbUpdate.role = safeFields.role;
+        if (safeFields.status) sbUpdate.status = safeFields.status;
+        if (safeFields.department) sbUpdate.department = safeFields.department;
+        if (safeFields.jobTitle || safeFields.job_title) sbUpdate.job_title = safeFields.jobTitle || safeFields.job_title;
+        if (safeFields.baseSalary || safeFields.salary) sbUpdate.salary = Number(safeFields.baseSalary || safeFields.salary);
+        if (safeFields.email) sbUpdate.email = safeFields.email;
+        if (safeFields.phone) sbUpdate.phone = safeFields.phone;
+        if (safeFields.fullName) {
+          const parts = safeFields.fullName.trim().split(' ');
+          sbUpdate.first_name = parts[0] || '';
+          sbUpdate.last_name = parts.slice(1).join(' ') || '';
+        }
 
-          if (Object.keys(sbUpdate).length > 0) {
-            let supQuery = supabase.from('employees').update(sbUpdate);
-            const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-            if (isUUID) {
-              supQuery = supQuery.eq('id', id);
-            } else {
-              supQuery = supQuery.or(`id.eq.${id},employee_code.eq.${id}`);
-            }
-            await supQuery.eq('company_id', companyId);
+        if (Object.keys(sbUpdate).length > 0) {
+          let supQuery = supabase.from('employees').update(sbUpdate);
+          const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+          if (isUUID) {
+            supQuery = supQuery.eq('id', id);
+          } else {
+            supQuery = supQuery.or(`id.eq.${id},employee_code.eq.${id}`);
           }
-        } catch (sbErr) {
-          console.warn('[Supabase updateEmployee Fallback]:', sbErr);
+          const writeRes = await this.sbWrite(
+            supQuery.eq('company_id', companyId),
+            'تحديث بيانات موظف',
+            { table: 'employees', id, record: { ...(currentEmp || {}), ...safeFields, id }, action: 'update', payload: sbUpdate, match: { id, company_id: companyId } }
+          );
+          if (!writeRes.success) sbSuccess = false;
         }
       }
 
@@ -4208,6 +4559,14 @@ class ApiService {
       });
 
       const updatedEmp = idx !== -1 ? db.employees[idx] : { id, ...safeFields };
+
+      if (!sbSuccess) {
+        return this.#createEnvelope(false, cloneData(updatedEmp), 'تم تحديث بيانات الموظف محلياً وتعذر الحفظ السحابي حالياً', {
+          pendingSync: true,
+          message: 'تم تحديث بيانات الموظف محلياً بانتظار المزامنة السحابية.'
+        });
+      }
+
       return this.#createEnvelope(true, cloneData(updatedEmp), null, { message: 'تم تحديث بيانات الموظف بنجاح' });
     } catch (err) {
       return this.#handleError(err, 'فشل في تحديث بيانات الموظف');
@@ -4270,14 +4629,22 @@ class ApiService {
       LocalDatabase.saveDB(db);
 
       // التحديث في Supabase
+      let sbSuccess = true;
       if (supabase) {
-        try {
-          await supabase.from('employees').update({ pin: cleanNewPin }).eq('id', emp.id);
-          if (emp.role === 'manager' || emp.role === 'admin') {
-            await supabase.from('companies').update({ manager_pin: cleanNewPin }).eq('id', emp.company_id);
-          }
-        } catch (sbErr) {
-          console.warn('[Supabase changeEmployeePin Fallback]:', sbErr);
+        const w1 = await this.sbWrite(
+          supabase.from('employees').update({ pin: cleanNewPin }).eq('id', emp.id),
+          'تغيير رمز PIN للموظف',
+          { table: 'employees', id: emp.id, action: 'update', payload: { pin: cleanNewPin }, match: { id: emp.id } }
+        );
+        if (!w1.success) sbSuccess = false;
+
+        if (emp.role === 'manager' || emp.role === 'admin') {
+          const w2 = await this.sbWrite(
+            supabase.from('companies').update({ manager_pin: cleanNewPin }).eq('id', emp.company_id),
+            'تحديث رمز PIN لمدير الشركة',
+            { table: 'companies', id: emp.company_id, action: 'update', payload: { manager_pin: cleanNewPin }, match: { id: emp.company_id } }
+          );
+          if (!w2.success) sbSuccess = false;
         }
       }
 
@@ -4289,6 +4656,13 @@ class ApiService {
         targetId: emp.id,
         details: `قام الموظف ${emp.fullName || emp.id} بتغيير رمز PIN السري الخاص به بنجاح.`
       });
+
+      if (!sbSuccess) {
+        return this.#createEnvelope(false, { employeeId: emp.id, pin: cleanNewPin }, 'تم تغيير رمز PIN محلياً وتعذر التحديث السحابي حالياً', {
+          pendingSync: true,
+          message: 'تم تغيير رمز PIN السري محلياً بانتظار المزامنة السحابية.'
+        });
+      }
 
       return this.#createEnvelope(true, { employeeId: emp.id, pin: cleanNewPin }, 'تم تغيير رمز PIN السري الخاص بك بنجاح!');
     } catch (err) {
@@ -4303,16 +4677,18 @@ class ApiService {
       const db = LocalDatabase.getDB();
 
       // 1. الحذف من Supabase مع فلتر company_id الإجباري
+      let sbSuccess = true;
       if (supabase) {
-        try {
-          await supabase
+        const writeRes = await this.sbWrite(
+          supabase
             .from('employees')
             .delete()
             .eq('id', id)
-            .eq('company_id', companyId);
-        } catch (sbErr) {
-          console.warn('[Supabase deleteEmployee Fallback]:', sbErr);
-        }
+            .eq('company_id', companyId),
+          'حذف موظف',
+          { table: 'employees', id, action: 'delete', match: { id, company_id: companyId } }
+        );
+        if (!writeRes.success) sbSuccess = false;
       }
 
       // 2. الحذف من LocalDatabase
@@ -4328,6 +4704,13 @@ class ApiService {
         targetId: id,
         details: `حذف سجل الموظف: ${empName} (${id}) نهائياً من شركة (${companyId})`
       });
+
+      if (!sbSuccess) {
+        return this.#createEnvelope(false, { id }, 'تم حذف الموظف محلياً وتعذر الحذف السحابي حالياً', {
+          pendingSync: true,
+          message: 'تم حذف الموظف محلياً بانتظار المزامنة السحابية.'
+        });
+      }
 
       return this.#createEnvelope(true, { id }, null, { message: 'تم حذف الموظف بنجاح' });
     } catch (err) {
@@ -4389,7 +4772,9 @@ class ApiService {
           }
           const { data: empData } = await empQuery.maybeSingle();
           if (empData) employee = this.#normalizeEmployee(empData);
-        } catch (e) {}
+        } catch (e) {
+          console.warn('[Supabase Attendance Employee Query Warning]:', e);
+        }
       }
 
       if (!employee) {
@@ -4491,7 +4876,9 @@ class ApiService {
           if (sbAtt) {
             todayRecord = this.#normalizeAttendance(sbAtt, { [employee.id]: employee });
           }
-        } catch (e) {}
+        } catch (e) {
+          console.warn('[Supabase Attendance Today Record Warning]:', e);
+        }
       }
 
       if (!todayRecord) {
@@ -4515,7 +4902,9 @@ class ApiService {
             if (sbYest) {
               yesterdayRecord = this.#normalizeAttendance(sbYest, { [employee.id]: employee });
             }
-          } catch (e) {}
+          } catch (e) {
+            console.warn('[Supabase Attendance Yesterday Record Warning]:', e);
+          }
         }
 
         if (!yesterdayRecord) {
@@ -4585,23 +4974,26 @@ class ApiService {
         };
 
         // إدراج الحضور في Supabase أولاً
+        let sbSuccess = true;
         if (supabase) {
-          try {
-            await supabase.from('attendance').upsert([{
-              id: newRecord.id,
-              company_id: companyId,
-              employee_id: employee.id,
-              date: todayStr,
-              check_in: now.toISOString(),
-              check_in_lat: locationCoords.lat || null,
-              check_in_lng: locationCoords.lng || null,
-              late_minutes: netLateMins,
-              status: status,
-              notes: message
-            }], { onConflict: 'company_id,employee_id,date' });
-          } catch (sbAttErr) {
-            console.warn('[Supabase Attendance Insert Fallback]:', sbAttErr);
-          }
+          const attPayload = {
+            id: newRecord.id,
+            company_id: companyId,
+            employee_id: employee.id,
+            date: todayStr,
+            check_in: now.toISOString(),
+            check_in_lat: locationCoords.lat || null,
+            check_in_lng: locationCoords.lng || null,
+            late_minutes: netLateMins,
+            status: status,
+            notes: message
+          };
+          const writeRes = await this.sbWrite(
+            supabase.from('attendance').upsert([attPayload], { onConflict: 'company_id,employee_id,date' }),
+            'تسجيل حضور الموظف',
+            { table: 'attendance', id: newRecord.id, record: newRecord, action: 'upsert', payload: attPayload, options: { onConflict: 'company_id,employee_id,date' } }
+          );
+          if (!writeRes.success) sbSuccess = false;
         }
 
         // تحديث LocalDatabase
@@ -4625,6 +5017,24 @@ class ApiService {
           details: `تسجيل حضور للموظف: ${employee.fullName} (${employee.id}) بشركة (${companyId}) في ${nowTimeStr} [GPS موثق] - الحالة: ${status}`,
           payload: { location_coords: locationCoords, status, company_id: companyId }
         });
+
+        if (!sbSuccess) {
+          return this.#createEnvelope(false, cloneData(newRecord), 'تم تسجيل الحضور محلياً وتعذر الحفظ السحابي حالياً', {
+            pendingSync: true,
+            punchType: 'check_in',
+            employee: cloneData(employee),
+            timestamp: nowTimeStr,
+            date: todayStr,
+            status: status,
+            lateMinutes: netLateMins,
+            overtimeHours: 0,
+            actualHours: 0,
+            earlyLeaveMinutes: 0,
+            location_coords: locationCoords,
+            message: 'تم تسجيل الحضور محلياً بانتظار المزامنة السحابية',
+            record: cloneData(newRecord)
+          });
+        }
 
         return this.#createEnvelope(true, cloneData(newRecord), null, {
           punchType: 'check_in',
@@ -4695,26 +5105,36 @@ class ApiService {
         todayRecord.notes += ` | انصراف في ${nowTimeStr} [GPS موثق]`;
 
         // تحديث في Supabase أولاً
+        let sbSuccess = true;
         if (supabase) {
-          try {
-            await supabase
+          const updatePayload = {
+            check_out: now.toISOString(),
+            check_out_lat: locationCoords.lat || null,
+            check_out_lng: locationCoords.lng || null,
+            actual_hours: actualHours,
+            late_minutes: todayRecord.lateMinutes ?? 0,
+            early_leave_minutes: earlyLeaveMinutes,
+            overtime_hours: overtimeHours,
+            notes: todayRecord.notes
+          };
+          const writeRes = await this.sbWrite(
+            supabase
               .from('attendance')
-              .update({
-                check_out: now.toISOString(),
-                check_out_lat: locationCoords.lat || null,
-                check_out_lng: locationCoords.lng || null,
-                actual_hours: actualHours,
-                late_minutes: todayRecord.lateMinutes ?? 0,
-                early_leave_minutes: earlyLeaveMinutes,
-                overtime_hours: overtimeHours,
-                notes: todayRecord.notes
-              })
+              .update(updatePayload)
               .eq('employee_id', employee.id)
               .eq('date', todayRecord.date)
-              .eq('company_id', companyId);
-          } catch (sbAttOutErr) {
-            console.warn('[Supabase Attendance CheckOut Fallback]:', sbAttOutErr);
-          }
+              .eq('company_id', companyId),
+            'تسجيل انصراف الموظف',
+            {
+              table: 'attendance',
+              id: todayRecord.id,
+              record: todayRecord,
+              action: 'update',
+              payload: updatePayload,
+              match: { employee_id: employee.id, date: todayRecord.date, company_id: companyId }
+            }
+          );
+          if (!writeRes.success) sbSuccess = false;
         }
 
         // تحديث LocalDatabase
@@ -4738,6 +5158,23 @@ class ApiService {
           details: `تسجيل انصراف للموظف: ${employee.fullName} (${employee.id}) بشركة (${companyId}) في ${nowTimeStr} [ساعات العمل: ${actualHours}]`,
           payload: { actualHours, overtimeHours, earlyLeaveMinutes, location_coords: locationCoords, company_id: companyId }
         });
+
+        if (!sbSuccess) {
+          return this.#createEnvelope(false, cloneData(todayRecord), 'تم تسجيل الانصراف محلياً وتعذر التحديث السحابي حالياً', {
+            pendingSync: true,
+            punchType: 'check_out',
+            employee: cloneData(employee),
+            timestamp: nowTimeStr,
+            date: todayRecord.date,
+            status: todayRecord.status,
+            actualHours: actualHours,
+            earlyLeaveMinutes: earlyLeaveMinutes,
+            overtimeHours: overtimeHours,
+            location_coords: locationCoords,
+            message: 'تم تسجيل الانصراف محلياً بانتظار المزامنة السحابية',
+            record: cloneData(todayRecord)
+          });
+        }
 
         return this.#createEnvelope(true, cloneData(todayRecord), null, {
           punchType: 'check_out',
@@ -4789,7 +5226,9 @@ class ApiService {
                 const idSet = new Set([...deptEmpIds, ...sbDeptEmps.map(e => e.id)]);
                 deptEmpIds = Array.from(idSet);
               }
-            } catch (e) {}
+            } catch (e) {
+              console.warn('[Supabase getAttendanceLogs Dept Employees Warning]:', e);
+            }
 
             if (deptEmpIds.length === 0) {
               return this.#createEnvelope(true, []);
@@ -4918,21 +5357,24 @@ class ApiService {
       };
 
       // 1. الإدراج في Supabase أولاً مع حقل company_id
+      let sbSuccess = true;
       if (supabase) {
-        try {
-          await supabase.from('attendance').upsert([{
-            id: recordId,
-            company_id: companyId,
-            employee_id: emp.id,
-            date: entry.date,
-            check_in: entry.checkIn ? `${entry.date}T${entry.checkIn}` : null,
-            check_out: entry.checkOut ? `${entry.date}T${entry.checkOut}` : null,
-            status: newRecord.status,
-            notes: newRecord.notes
-          }], { onConflict: 'company_id,employee_id,date' });
-        } catch (sbErr) {
-          console.warn('[Supabase saveManualAttendance Fallback]:', sbErr);
-        }
+        const attPayload = {
+          id: recordId,
+          company_id: companyId,
+          employee_id: emp.id,
+          date: entry.date,
+          check_in: entry.checkIn ? `${entry.date}T${entry.checkIn}` : null,
+          check_out: entry.checkOut ? `${entry.date}T${entry.checkOut}` : null,
+          status: newRecord.status,
+          notes: newRecord.notes
+        };
+        const writeRes = await this.sbWrite(
+          supabase.from('attendance').upsert([attPayload], { onConflict: 'company_id,employee_id,date' }),
+          'تسجيل حضور يدوي',
+          { table: 'attendance', id: recordId, record: newRecord, action: 'upsert', payload: attPayload, options: { onConflict: 'company_id,employee_id,date' } }
+        );
+        if (!writeRes.success) sbSuccess = false;
       }
 
       // 2. التحديث في LocalDatabase
@@ -4950,6 +5392,14 @@ class ApiService {
         details: `تعديل يدوي لسجل حضور وانصراف الموظف: ${emp.fullName} (${emp.id}) بتاريخ ${entry.date} بشركة (${companyId})`,
         payload: { ...entry, company_id: companyId }
       });
+
+      if (!sbSuccess) {
+        return this.#createEnvelope(false, cloneData(newRecord), 'تم حفظ الحضور اليدوي محلياً وتعذر الحفظ السحابي حالياً', {
+          pendingSync: true,
+          record: cloneData(newRecord),
+          message: 'تم حفظ سجل الحضور يدوياً محلياً بانتظار المزامنة السحابية.'
+        });
+      }
 
       return this.#createEnvelope(true, cloneData(newRecord), null, { message: 'تم حفظ سجل الحضور بنجاح' });
     } catch (err) {
@@ -5023,22 +5473,25 @@ class ApiService {
       };
 
       // 1. الإدراج في Supabase مع حقل company_id الإجباري
+      let sbSuccess = true;
       if (supabase) {
-        try {
-          await supabase.from('leaves').insert([{
-            id: newLeave.id,
-            company_id: companyId,
-            employee_id: emp.id,
-            leave_type: newLeave.leaveType || 'annual',
-            start_date: newLeave.startDate,
-            end_date: newLeave.endDate,
-            reason: newLeave.reason || 'إجازة رسمية',
-            status: newLeave.status || 'pending',
-            created_at: new Date().toISOString()
-          }]);
-        } catch (sbErr) {
-          console.warn('[Supabase createLeave Fallback]:', sbErr);
-        }
+        const sbLeave = {
+          id: newLeave.id,
+          company_id: companyId,
+          employee_id: emp.id,
+          leave_type: newLeave.leaveType || 'annual',
+          start_date: newLeave.startDate,
+          end_date: newLeave.endDate,
+          reason: newLeave.reason || 'إجازة رسمية',
+          status: newLeave.status || 'pending',
+          created_at: new Date().toISOString()
+        };
+        const writeRes = await this.sbWrite(
+          supabase.from('leaves').insert([sbLeave]),
+          'تقديم طلب إجازة',
+          { table: 'leaves', id: newLeave.id, record: newLeave, action: 'insert', payload: sbLeave }
+        );
+        if (!writeRes.success) sbSuccess = false;
       }
 
       // 2. الحفظ في LocalDatabase
@@ -5077,6 +5530,13 @@ class ApiService {
         payload: { ...leaveData, company_id: companyId }
       });
 
+      if (!sbSuccess) {
+        return this.#createEnvelope(false, cloneData(newLeave), 'تم تقديم طلب الإجازة محلياً وتعذر الحفظ السحابي حالياً', {
+          pendingSync: true,
+          message: 'تم تقديم طلب الإجازة محلياً بانتظار المزامنة السحابية.'
+        });
+      }
+
       return this.#createEnvelope(true, cloneData(newLeave), null, { message: 'تم تقديم طلب الإجازة بنجاح' });
     } catch (err) {
       return this.#handleError(err, 'فشل في تسجيل طلب الإجازة');
@@ -5095,19 +5555,22 @@ class ApiService {
       item.approvedBy = approvedBy;
 
       // 1. التحديث في Supabase مع فلتر company_id الإجباري
+      let sbSuccess = true;
       if (supabase) {
-        try {
-          await supabase
+        const updatePayload = {
+          status: status,
+          reviewed_by: approvedBy
+        };
+        const writeRes = await this.sbWrite(
+          supabase
             .from('leaves')
-            .update({
-              status: status,
-              reviewed_by: approvedBy
-            })
+            .update(updatePayload)
             .eq('id', leaveId)
-            .eq('company_id', companyId);
-        } catch (sbErr) {
-          console.warn('[Supabase updateLeaveStatus Fallback]:', sbErr);
-        }
+            .eq('company_id', companyId),
+          'تحديث حالة الإجازة',
+          { table: 'leaves', id: leaveId, record: item, action: 'update', payload: updatePayload, match: { id: leaveId, company_id: companyId } }
+        );
+        if (!writeRes.success) sbSuccess = false;
       }
 
       if (status === 'approved' && item.leaveType === 'annual') {
@@ -5126,6 +5589,13 @@ class ApiService {
         targetId: leaveId,
         details: `${status === 'approved' ? 'اعتماد' : 'رفض'} طلب الإجازة (${leaveId}) للموظف ${item.employeeName} بشركة (${companyId}) بواسطة: ${approvedBy}`
       });
+
+      if (!sbSuccess) {
+        return this.#createEnvelope(false, cloneData(item), 'تم تحديث حالة طلب الإجازة محلياً وتعذر التحديث السحابي حالياً', {
+          pendingSync: true,
+          message: `تم تحديث حالة طلب الإجازة محلياً بانتظار المزامنة السحابية.`
+        });
+      }
 
       return this.#createEnvelope(true, cloneData(item), null, { message: `تم تحديث حالة طلب الإجازة إلى: ${status}` });
     } catch (err) {
@@ -5269,20 +5739,23 @@ class ApiService {
       };
 
       // 1. الإدراج في Supabase مع حقل company_id الإجباري
+      let sbSuccess = true;
       if (supabase) {
-        try {
-          await supabase.from('adjustments').insert([{
-            id: newId,
-            company_id: companyId,
-            employee_id: emp.id,
-            adjustment_type: adjData.type || 'bonus',
-            amount: adjValue,
-            effective_date: effDate,
-            status: 'approved'
-          }]);
-        } catch (sbErr) {
-          console.warn('[Supabase createAdjustment Fallback]:', sbErr);
-        }
+        const sbAdj = {
+          id: newId,
+          company_id: companyId,
+          employee_id: emp.id,
+          adjustment_type: adjData.type || 'bonus',
+          amount: adjValue,
+          effective_date: effDate,
+          status: 'approved'
+        };
+        const writeRes = await this.sbWrite(
+          supabase.from('adjustments').insert([sbAdj]),
+          'تسجيل معاملة مالية',
+          { table: 'adjustments', id: newId, record: newAdj, action: 'insert', payload: sbAdj }
+        );
+        if (!writeRes.success) sbSuccess = false;
       }
 
       // 2. الحفظ في LocalDatabase
@@ -5299,6 +5772,13 @@ class ApiService {
         payload: { ...adjData, company_id: companyId }
       });
 
+      if (!sbSuccess) {
+        return this.#createEnvelope(false, cloneData(newAdj), 'تم تسجيل المعاملة المالية محلياً وتعذر الحفظ السحابي حالياً', {
+          pendingSync: true,
+          message: 'تم تسجيل المعاملة المالية محلياً بانتظار المزامنة السحابية.'
+        });
+      }
+
       return this.#createEnvelope(true, cloneData(newAdj), null, { message: 'تم تسجيل المعاملة المالية بنجاح' });
     } catch (err) {
       return this.#handleError(err, 'فشل في إضافة المعاملة المالية');
@@ -5312,16 +5792,18 @@ class ApiService {
       const db = LocalDatabase.getDB();
 
       // 1. الحذف من Supabase مع فلتر company_id الإجباري
+      let sbSuccess = true;
       if (supabase) {
-        try {
-          await supabase
+        const writeRes = await this.sbWrite(
+          supabase
             .from('adjustments')
             .delete()
             .eq('id', id)
-            .eq('company_id', companyId);
-        } catch (sbErr) {
-          console.warn('[Supabase deleteAdjustment Fallback]:', sbErr);
-        }
+            .eq('company_id', companyId),
+          'حذف معاملة مالية',
+          { table: 'adjustments', id, action: 'delete', match: { id, company_id: companyId } }
+        );
+        if (!writeRes.success) sbSuccess = false;
       }
 
       const targetAdj = (db.adjustments || []).find(a => a.id === id);
@@ -5336,6 +5818,13 @@ class ApiService {
         targetId: id,
         details: `حذف المعاملة المالية رقم (${id}) [${adjDesc}] بشركة (${companyId})`
       });
+
+      if (!sbSuccess) {
+        return this.#createEnvelope(false, { id }, 'تم حذف المعاملة المالية محلياً وتعذر الحذف السحابي حالياً', {
+          pendingSync: true,
+          message: 'تم حذف المعاملة المالية محلياً بانتظار المزامنة السحابية.'
+        });
+      }
 
       return this.#createEnvelope(true, { id }, null, { message: 'تم حذف المعاملة المالية بنجاح' });
     } catch (err) {
@@ -5572,17 +6061,13 @@ class ApiService {
 
       // 1. تصفير الجداول في Supabase للشركة الحالية مع الحفاظ على حساب المبرمج فقط
       if (supabase) {
-        try {
-          await Promise.allSettled([
-            supabase.from('leaves').delete().eq('company_id', companyId),
-            supabase.from('attendance').delete().eq('company_id', companyId),
-            supabase.from('requests').delete().eq('company_id', companyId),
-            supabase.from('adjustments').delete().eq('company_id', companyId),
-            supabase.from('employees').delete().eq('company_id', companyId).neq('email', 'aemade2016@gmail.com')
-          ]);
-        } catch (sbErr) {
-          console.warn('[Supabase Reset Warning]:', sbErr);
-        }
+        await Promise.allSettled([
+          this.sbWrite(supabase.from('leaves').delete().eq('company_id', companyId), 'تصفير الإجازات', { table: 'leaves', action: 'delete', match: { company_id: companyId } }),
+          this.sbWrite(supabase.from('attendance').delete().eq('company_id', companyId), 'تصفير الحضور', { table: 'attendance', action: 'delete', match: { company_id: companyId } }),
+          this.sbWrite(supabase.from('requests').delete().eq('company_id', companyId), 'تصفير الطلبات', { table: 'requests', action: 'delete', match: { company_id: companyId } }),
+          this.sbWrite(supabase.from('adjustments').delete().eq('company_id', companyId), 'تصفير المعاملات المالية', { table: 'adjustments', action: 'delete', match: { company_id: companyId } }),
+          this.sbWrite(supabase.from('employees').delete().eq('company_id', companyId).neq('email', 'aemade2016@gmail.com'), 'تصفير الموظفين', { table: 'employees', action: 'delete', match: { company_id: companyId } })
+        ]);
       }
 
       // 2. تصفير قاعدة البيانات المحلية
