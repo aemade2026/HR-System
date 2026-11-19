@@ -5185,13 +5185,22 @@ class ApiService {
           department: emp.department,
           jobTitle: emp.jobTitle,
           role: emp.role,
+          employee: {
+            id: emp.id,
+            fullName: emp.fullName,
+            department: emp.department,
+            jobTitle: emp.jobTitle,
+            role: emp.role
+          },
           salaryStatus: emp.salaryStatus || 'processing',
           company_id: companyId,
+          month: monthStr,
           rates: {
             baseSalary,
             dailyRate,
             hourlyRate,
-            minuteRate
+            minuteRate,
+            overtimeHours: totalOvertimeHours
           },
           earnings: {
             baseSalary,
@@ -5199,6 +5208,7 @@ class ApiService {
             transport,
             otherAllowances,
             totalAllowances,
+            allowances: totalAllowances,
             overtimeHours: totalOvertimeHours,
             overtimeEarnings,
             bonuses: totalBonuses,
