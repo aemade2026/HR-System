@@ -2673,6 +2673,102 @@
   }
 
   /**
+   * استدعاء واجهة بصمة الجهاز الأصلية (Android BiometricPrompt / iOS FaceID/TouchID / Windows Hello)
+   * تفعيل مستشعر البصمة المدمج بالهاتف مباشرة ومنع ظهور رسالة "No passkeys available"
+   */
+  async function requestDeviceBiometricVerification(empId, empName) {
+    if (!window.PublicKeyCredential || !navigator.credentials) {
+      throw new Error('NOT_SUPPORTED');
+    }
+
+    let isBioSupported = false;
+    if (typeof PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable === 'function') {
+      try {
+        isBioSupported = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+      } catch (e) {
+        isBioSupported = false;
+      }
+    }
+
+    if (!isBioSupported) {
+      throw new Error('NO_PLATFORM_AUTHENTICATOR');
+    }
+
+    const challenge = new Uint8Array(32);
+    if (window.crypto && window.crypto.getRandomValues) {
+      window.crypto.getRandomValues(challenge);
+    }
+
+    const storageKey = 'AE_DEVICE_PASSKEY_' + (empId || 'default');
+    const savedKey = localStorage.getItem(storageKey);
+
+    // 1. إذا كان الموظف قد سجّل بصمة على هذا الجهاز مسبقاً، نطلب التحقق منها
+    if (savedKey) {
+      try {
+        const credIdBytes = Uint8Array.from(atob(savedKey), c => c.charCodeAt(0));
+        const getOptions = {
+          publicKey: {
+            challenge: challenge,
+            timeout: 60000,
+            userVerification: 'required',
+            allowCredentials: [{
+              id: credIdBytes,
+              type: 'public-key',
+              transports: ['internal']
+            }]
+          }
+        };
+
+        const assertion = await navigator.credentials.get(getOptions);
+        if (assertion) {
+          return { success: true, credential: assertion };
+        }
+      } catch (getErr) {
+        console.warn('[Device Biometrics] get() failed or key cleared, falling back to create():', getErr);
+      }
+    }
+
+    // 2. تفعيل مستشعر بصمة الهاتف الأصلي (BiometricPrompt) مباشرة عبر create() مع platform authenticator
+    // هذا الاستدعاء يُجبر الهاتف على فتح شاشة مسح البصمة مباشرة دون البحث عن أجهزة أخرى
+    const cleanId = String(empId || 'emp_user').replace(/[^\w-]/g, '_');
+    const cleanName = (empName || 'موظف').toString().replace(/[^\w\s-]/g, '').trim() || cleanId;
+
+    const createOptions = {
+      publicKey: {
+        challenge: challenge,
+        rp: {
+          name: "AE (HR-SYSTEM)"
+        },
+        user: {
+          id: new TextEncoder().encode(cleanId),
+          name: cleanId + '@ae-hr.local',
+          displayName: cleanName
+        },
+        pubKeyCredParams: [
+          { type: "public-key", alg: -7 },   // ES256 (Android, iOS)
+          { type: "public-key", alg: -257 }  // RS256 (Windows Hello)
+        ],
+        authenticatorSelection: {
+          authenticatorAttachment: "platform", // بصمة الجهاز المدمجة (يمنع No passkeys / Use different device)
+          userVerification: "required",        // إلزام البصمة أو قفل الشاشة
+          residentKey: "preferred"
+        },
+        timeout: 60000,
+        attestation: "none"
+      }
+    };
+
+    const newCredential = await navigator.credentials.create(createOptions);
+    if (newCredential && newCredential.rawId) {
+      const base64Id = btoa(String.fromCharCode(...new Uint8Array(newCredential.rawId)));
+      localStorage.setItem(storageKey, base64Id);
+      return { success: true, credential: newCredential };
+    }
+
+    throw new Error('BIOMETRICS_FAILED');
+  }
+
+  /**
    * Setup Creative Auth Portal (Biometric + 6-digit PIN Numpad).
    */
   function setupAuthPortal() {
@@ -2705,102 +2801,6 @@
       authBioView?.classList.add('hidden');
       resetAuthPin();
     });
-
-    /**
-     * استدعاء واجهة بصمة الجهاز الأصلية (Android BiometricPrompt / iOS FaceID/TouchID / Windows Hello)
-     * تفعيل مستشعر البصمة المدمج بالهاتف مباشرة ومنع ظهور رسالة "No passkeys available"
-     */
-    const requestDeviceBiometricVerification = async (empId, empName) => {
-      if (!window.PublicKeyCredential || !navigator.credentials) {
-        throw new Error('NOT_SUPPORTED');
-      }
-
-      let isBioSupported = false;
-      if (typeof PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable === 'function') {
-        try {
-          isBioSupported = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-        } catch (e) {
-          isBioSupported = false;
-        }
-      }
-
-      if (!isBioSupported) {
-        throw new Error('NO_PLATFORM_AUTHENTICATOR');
-      }
-
-      const challenge = new Uint8Array(32);
-      if (window.crypto && window.crypto.getRandomValues) {
-        window.crypto.getRandomValues(challenge);
-      }
-
-      const storageKey = 'AE_DEVICE_PASSKEY_' + (empId || 'default');
-      const savedKey = localStorage.getItem(storageKey);
-
-      // 1. إذا كان الموظف قد سجّل بصمة على هذا الجهاز مسبقاً، نطلب التحقق منها
-      if (savedKey) {
-        try {
-          const credIdBytes = Uint8Array.from(atob(savedKey), c => c.charCodeAt(0));
-          const getOptions = {
-            publicKey: {
-              challenge: challenge,
-              timeout: 60000,
-              userVerification: 'required',
-              allowCredentials: [{
-                id: credIdBytes,
-                type: 'public-key',
-                transports: ['internal']
-              }]
-            }
-          };
-
-          const assertion = await navigator.credentials.get(getOptions);
-          if (assertion) {
-            return { success: true, credential: assertion };
-          }
-        } catch (getErr) {
-          console.warn('[Device Biometrics] get() failed or key cleared, falling back to create():', getErr);
-        }
-      }
-
-      // 2. تفعيل مستشعر بصمة الهاتف الأصلي (BiometricPrompt) مباشرة عبر create() مع platform authenticator
-      // هذا الاستدعاء يُجبر الهاتف على فتح شاشة مسح البصمة مباشرة دون البحث عن أجهزة أخرى
-      const cleanId = String(empId || 'emp_user').replace(/[^\w-]/g, '_');
-      const cleanName = (empName || 'موظف').toString().replace(/[^\w\s-]/g, '').trim() || cleanId;
-
-      const createOptions = {
-        publicKey: {
-          challenge: challenge,
-          rp: {
-            name: "AE (HR-SYSTEM)"
-          },
-          user: {
-            id: new TextEncoder().encode(cleanId),
-            name: cleanId + '@ae-hr.local',
-            displayName: cleanName
-          },
-          pubKeyCredParams: [
-            { type: "public-key", alg: -7 },   // ES256 (Android, iOS)
-            { type: "public-key", alg: -257 }  // RS256 (Windows Hello)
-          ],
-          authenticatorSelection: {
-            authenticatorAttachment: "platform", // بصمة الجهاز المدمجة (يمنع No passkeys / Use different device)
-            userVerification: "required",        // إلزام البصمة أو قفل الشاشة
-            residentKey: "preferred"
-          },
-          timeout: 60000,
-          attestation: "none"
-        }
-      };
-
-      const newCredential = await navigator.credentials.create(createOptions);
-      if (newCredential && newCredential.rawId) {
-        const base64Id = btoa(String.fromCharCode(...new Uint8Array(newCredential.rawId)));
-        localStorage.setItem(storageKey, base64Id);
-        return { success: true, credential: newCredential };
-      }
-
-      throw new Error('BIOMETRICS_FAILED');
-    };
 
     // Biometric Login via WebAuthn API (Local Device Biometrics) with Graceful PIN Fallback
     const executeBioLogin = async () => {
@@ -4231,6 +4231,130 @@
         </div>
       `;
     }).join('');
+  }
+
+  /**
+   * Comprehensive Request Details Modal Controller
+   */
+  function openRequestDetailsModal(req) {
+    if (!req) return;
+    const modal = document.getElementById('requestDetailsModal');
+    if (!modal) return;
+
+    sound.playClick();
+
+    // Employee Meta
+    const empNameEl = document.getElementById('reqDetailsEmpName');
+    const empIdEl = document.getElementById('reqDetailsEmpId');
+    const empDeptEl = document.getElementById('reqDetailsEmpDept');
+    const reqIdEl = document.getElementById('reqDetailsId');
+
+    if (empNameEl) empNameEl.textContent = req.employeeName || req.employee?.fullName || 'غير محدد';
+    if (empIdEl) empIdEl.textContent = req.employeeId || req.employee?.id || '--';
+    if (empDeptEl) empDeptEl.textContent = req.department || req.employee?.department || '--';
+    if (reqIdEl) reqIdEl.textContent = req.id || 'REQ-000';
+
+    // Status Badge
+    const statusBadge = document.getElementById('reqDetailsStatusBadge');
+    if (statusBadge) {
+      if (req.status === 'approved' || req.status === 'مقبول') {
+        statusBadge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 inline-flex items-center gap-1.5 shadow-sm';
+        statusBadge.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-500"></span><span>معتمد</span>';
+      } else if (req.status === 'rejected' || req.status === 'مرفوض') {
+        statusBadge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-300 dark:border-rose-800 inline-flex items-center gap-1.5 shadow-sm';
+        statusBadge.innerHTML = '<span class="w-2 h-2 rounded-full bg-rose-500"></span><span>مرفوض</span>';
+      } else {
+        statusBadge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800 inline-flex items-center gap-1.5 shadow-sm';
+        statusBadge.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-500 badge-live-pulse"></span><span>معلق</span>';
+      }
+    }
+
+    // Type Badge
+    const typeBadge = document.getElementById('reqDetailsTypeBadge');
+    if (typeBadge) {
+      const typeLabel = req.typeName || req.title || req.type || 'طلب إداري';
+      typeBadge.innerHTML = `<i class="fa-solid fa-file-lines"></i><span>${escapeHTML(typeLabel)}</span>`;
+    }
+
+    // Created At
+    const createdEl = document.getElementById('reqDetailsCreatedAt');
+    if (createdEl) {
+      createdEl.textContent = req.submittedAt || req.createdAt || '--';
+    }
+
+    // Timing / Duration
+    const durationBadge = document.getElementById('reqDetailsDurationBadge');
+    const timingText = document.getElementById('reqDetailsTimingText');
+    if (durationBadge) {
+      if (req.hours || req.hoursCount) {
+        durationBadge.textContent = `${req.hours || req.hoursCount} ساعة`;
+      } else if (req.daysCount) {
+        durationBadge.textContent = `${req.daysCount} يوم`;
+      } else if (req.amount || req.value) {
+        durationBadge.textContent = formatCurrency(req.amount || req.value);
+      } else {
+        durationBadge.textContent = '--';
+      }
+    }
+    if (timingText) {
+      if (req.startDate && req.endDate) {
+        timingText.textContent = `من تاريخ: ${req.startDate} إلى تاريخ: ${req.endDate}`;
+      } else if (req.date) {
+        timingText.textContent = `التاريخ المحدد: ${req.date}`;
+      } else {
+        timingText.textContent = 'تفاصيل الفترة محددة بالطلب';
+      }
+    }
+
+    // Reason
+    const reasonEl = document.getElementById('reqDetailsReasonText');
+    if (reasonEl) {
+      reasonEl.textContent = req.reason || 'لا توجد أسباب أو مبررات مدونة بالطلب.';
+    }
+
+    // Decision Section & Manager Reply
+    const decisionDate = document.getElementById('reqDetailsDecisionDate');
+    const decisionReviewer = document.getElementById('reqDetailsDecisionReviewer');
+    const managerReply = document.getElementById('reqDetailsManagerReplyText');
+
+    if (decisionDate) decisionDate.textContent = req.reviewedAt || '--';
+    if (decisionReviewer) decisionReviewer.textContent = req.reviewedBy ? `المراجع: ${req.reviewedBy}` : 'إدارة الموارد البشرية';
+    if (managerReply) {
+      managerReply.textContent = req.manager_reply || req.managerReply || req.reviewNotes || req.notes || 'لا توجد ملاحظات مدونة بعد.';
+    }
+
+    modal.classList.remove('hidden');
+  }
+
+  function closeRequestDetailsModal() {
+    const modal = document.getElementById('requestDetailsModal');
+    if (modal) modal.classList.add('hidden');
+  }
+
+  function setupRequestDetailsModal() {
+    const modal = document.getElementById('requestDetailsModal');
+    const closeBtn = document.getElementById('closeReqDetailsModalBtn');
+    const dismissBtn = document.getElementById('dismissReqDetailsModalBtn');
+
+    closeBtn?.addEventListener('click', () => {
+      sound.playClick();
+      closeRequestDetailsModal();
+    });
+
+    dismissBtn?.addEventListener('click', () => {
+      sound.playClick();
+      closeRequestDetailsModal();
+    });
+
+    modal?.addEventListener('click', (e) => {
+      if (e.target === modal) closeRequestDetailsModal();
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && modal && !modal.classList.contains('hidden')) {
+        closeRequestDetailsModal();
+      }
+    });
   }
 
   /**
@@ -7945,6 +8069,7 @@
     // 8. Setup Employee Self-Service Portal
     setupEmployeePortal();
     setupEmployeeRequestsUI();
+    setupRequestDetailsModal();
 
     // 9. Setup Pending Approvals Module
     setupApprovalsModule();

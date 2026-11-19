@@ -52,3 +52,29 @@
     4. تصفير عمولة المبيعات لشهر الراتب إذا كانت مبيعات الموظف مسجلة لشهر آخر.
     5. إرجاع صافي الراتب الحقيقي السالب عند تجاوز السلفة لإجمالي الاستحقاقات مع تسجيل قيمة العجز `shortfall` والتحذيرات `warnings`.
     6. سلامة احتساب الرواتب عند وجود سجلات حضور بتواريخ غير معرفة أو غير نصية دون حدوث انهيار بركائز التحقق.
+
+## [الدفعة 3] - إصلاح نطاق البصمة، ونافذة تفاصيل الطلبات، وصلاحيات المبرمج الافتراضية
+
+### التغييرات المطبقة:
+* **الملف:** `api.js`
+  * **الأسطر:** 5397 - 5398
+  * **ما تغيّر:**
+    * تصدير الدالة `cloneData` وكائن `INITIAL_DATABASE` على الكائن العام `window` (`window.cloneData = cloneData;` و `window.INITIAL_DATABASE = INITIAL_DATABASE;`) لإتاحتها للاستخدام من ملف `app.js`.
+
+* **الملف:** `app.js`
+  * **الأسطر:** 2675 - 2769
+    * نقل دالة `requestDeviceBiometricVerification` من داخل النطاق المغلق لـ `setupAuthPortal` إلى نطاق مشترك أعلى دوال البوابة، مما مكّن كلاً من بوابة الدخول وشاشة الحضور الكشك `setupKioskTerminal` (السطر 5438) من استدعاء التحقق البيومتري دون ظهور استثناء `ReferenceError: requestDeviceBiometricVerification is not defined`.
+  * **الأسطر:** 4092 - 4198
+    * تعريف وتنفيذ دوال نافذة تفاصيل الطلبات: `openRequestDetailsModal(req)` و `closeRequestDetailsModal()` و `setupRequestDetailsModal()` للتعامل مع العنصر القائم `#requestDetailsModal`.
+    * ملء بيانات الطلب بأمان باستخدام `escapeHTML`: نوع الطلب، التواريخ، المدة/الساعات، السبب، شارة الحالة (معتمد/مرفوض/معلق)، رد المدير وملاحظات الاعتماد واسم المراجع.
+    * دعم إغلاق النافذة عبر زري الإغلاق (`#closeReqDetailsModalBtn`, `#dismissReqDetailsModalBtn`) والضغط على زر الهروب `Escape` والنقر خارج جسم النافذة.
+  * **السطر:** 8072
+    * استدعاء `setupRequestDetailsModal()` داخل `initApp()` لربط مستمعي أحداث إغلاق النافذة فور تشغيل التطبيق.
+  * **الأسطر:** 1755 - 1756 و 1951 - 1961
+    * التأكد من عمل عرض مصفوفة الصلاحيات الشاملة `renderProgrammerPermissionsMatrix` وزر استعادة الافتراضي `resetProgrammerPermissionsDefault` بنجاح بالاعتماد على تصدير `cloneData` و `INITIAL_DATABASE`.
+
+* **الملف:** `tests/batch3.test.js`
+  * **ما تغيّر:** إضافة 3 اختبارات تكاملية شاملة Node + jsdom:
+    1. التحقق من إمكانية استدعاء مسح البصمة في شاشة الكشك دون حدوث `ReferenceError`.
+    2. التحقق من تعريف `openRequestDetailsModal` وفتح نافذة `#requestDetailsModal` وعرض البيانات مع الهروب الآمن للنصوص `escapeHTML` وإمكانية إغلاقها.
+    3. التحقق من تصدير `cloneData` و `INITIAL_DATABASE` على `window` وعرض صفوف مصفوفة الصلاحيات وعمل زر استعادة الافتراضي بنجاح تام دون أخطاء.

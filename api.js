@@ -5394,6 +5394,8 @@ window.LocalDatabase = LocalDatabase;
 window.USE_BACKEND_API = USE_BACKEND_API;
 window.DEFAULT_AVATARS = DEFAULT_AVATARS;
 window.detectGender = detectGender;
+window.cloneData = cloneData;
+window.INITIAL_DATABASE = INITIAL_DATABASE;
 
   if (supabase) {
     window.supabaseClient = supabase;
