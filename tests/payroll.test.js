@@ -64,6 +64,30 @@ describe('AE HR-SYSTEM Payroll Module Integration Tests', () => {
       window.ApiService.simulateDelay = () => Promise.resolve();
     }
 
+    // Ensure programmer employee exists in db for test session
+    const db = window.LocalDatabase.getDB();
+    if (!Array.isArray(db.employees) || db.employees.length === 0) {
+      db.employees = [{
+        id: 'aa69f711-7ca3-41dc-b628-42a5dda853f6',
+        user_id: 'aa69f711-7ca3-41dc-b628-42a5dda853f6',
+        employee_code: 'EMP-0001',
+        fullName: 'مدير النظام (مبرمج)',
+        department: 'تقنية المعلومات',
+        jobTitle: 'مبرمج ومطور برمجيات',
+        shiftStart: '08:00',
+        shiftEnd: '16:00',
+        baseSalary: 25000,
+        housingAllowance: 1000,
+        transportAllowance: 1000,
+        otherAllowances: 500,
+        insurancePercent: 11,
+        role: 'programmer',
+        status: 'active',
+        company_id: '11111111-2222-3333-4444-555555555555'
+      }];
+      window.LocalDatabase.saveDB(db);
+    }
+
     // Load app.js
     const appCode = fs.readFileSync(appPath, 'utf8');
     window.eval(appCode);

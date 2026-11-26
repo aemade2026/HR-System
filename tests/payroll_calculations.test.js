@@ -33,6 +33,32 @@ describe('AE HR-SYSTEM Payroll Calculations and Attendance Tests (Batch 2)', () 
       window.ApiService.simulateDelay = () => Promise.resolve();
     }
 
+    // Ensure a test employee exists for payroll calculations tests
+    const db = window.LocalDatabase.getDB();
+    if (!Array.isArray(db.employees) || db.employees.length === 0) {
+      db.employees = [{
+        id: 'EMP-CALC-0001',
+        fullName: 'أحمد عماد الدين (اختبار الرواتب)',
+        first_name: 'أحمد',
+        last_name: 'عماد الدين',
+        department: 'العمليات والتشغيل',
+        jobTitle: 'مهندس عمليات',
+        shiftStart: '08:00',
+        shiftEnd: '16:00',
+        baseSalary: 10000,
+        housingAllowance: 1000,
+        transportAllowance: 1000,
+        otherAllowances: 500,
+        insurancePercent: 11,
+        salesTarget: 15000,
+        salesAchieved: 0,
+        commissionRate: 3,
+        role: 'employee',
+        status: 'active'
+      }];
+      window.LocalDatabase.saveDB(db);
+    }
+
     return { window, dom };
   }
 
@@ -58,7 +84,7 @@ describe('AE HR-SYSTEM Payroll Calculations and Attendance Tests (Batch 2)', () 
 
     try {
       const punchRes = await window.ApiService.punchAttendance({
-        pin: emp.pin,
+        employeeId: emp.id,
         coords: { latitude: db.settings.company_lat, longitude: db.settings.company_lng }
       });
       assert.strictEqual(punchRes.success, true);

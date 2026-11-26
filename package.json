@@ -16,6 +16,7 @@
     "*.svg"
   ],
   "scripts": {
+    "start": "node server.js",
     "test": "node --test tests/*.test.js",
     "check": "node --check api.js && node --check app.js && node --check sw.js",
     "lint": "eslint api.js app.js sw.js"

@@ -247,18 +247,21 @@
               </div>
             </div>
 
-            <!-- Manager Secret PIN -->
+            <!-- Manager Password -->
             <div class="sm:col-span-2">
-              <label for="pin" class="block text-xs font-bold text-slate-200 mb-1.5">
-                رمز PIN السري لدخول المدير (6 أرقام غير مكررة) <span class="text-rose-400">*</span>
+              <label for="password" class="block text-xs font-bold text-slate-200 mb-1.5">
+                كلمة المرور لدخول المدير المسؤول <span class="text-rose-400">*</span>
               </label>
               <div class="relative group">
-                <i class="fa-solid fa-key absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs group-focus-within:text-purple-400 transition-colors"></i>
-                <input type="password" id="pin" required maxlength="6" minlength="6" pattern="[0-9]{6}" inputmode="numeric" placeholder="••••••" class="w-full pr-10 pl-3.5 py-2.5 rounded-xl text-xs sm:text-sm bg-slate-900/90 text-white border border-slate-700/80 focus:border-purple-500 focus:bg-slate-900 focus:ring-4 focus:ring-purple-500/15 transition-all font-mono text-center tracking-[0.4em] text-base font-bold placeholder:text-slate-600">
+                <i class="fa-solid fa-lock absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs group-focus-within:text-purple-400 transition-colors"></i>
+                <input type="password" id="password" required minlength="6" placeholder="أدخل كلمة مرور قوية (6 خانات أو أكثر)" class="w-full pr-10 pl-10 py-2.5 rounded-xl text-xs sm:text-sm bg-slate-900/90 text-white border border-slate-700/80 focus:border-purple-500 focus:bg-slate-900 focus:ring-4 focus:ring-purple-500/15 transition-all font-mono font-bold placeholder:text-slate-500 text-right" dir="ltr">
+                <button type="button" id="togglePasswordBtn" class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-xs p-1 focus:outline-none transition-colors" title="إظهار/إخفاء كلمة المرور">
+                  <i class="fa-solid fa-eye" id="togglePasswordIcon"></i>
+                </button>
               </div>
               <p class="text-[11px] text-slate-400 mt-1.5 flex items-center gap-1.5">
                 <i class="fa-solid fa-shield-halved text-purple-400 text-[10px]"></i>
-                <span>يُستخدم هذا الرمز السري لتسجيل دخول المدير عبر بوابة البصمة ورمز الـ PIN المباشر.</span>
+                <span>تُستخدم كلمة المرور هذه لتسجيل دخول المدير إلى النظام عبر البريد الإلكتروني بعد اعتماد الشركة.</span>
               </p>
             </div>
 
@@ -309,7 +312,7 @@
             </div>
             <ul class="list-disc list-inside text-slate-400 space-y-1 pr-2">
               <li>سيقوم مسؤول النظام بمراجعة بيانات الشركة وتفعيلها.</li>
-              <li>يمكن للمدير تسجيل الدخول مباشرة فور التفعيل باستخدام رمز الـ PIN والبريد المسجل.</li>
+              <li>يمكن للمدير تسجيل الدخول مباشرة فور التفعيل باستخدام البريد الإلكتروني وكلمة المرور المسجلة.</li>
             </ul>
           </div>
 
@@ -371,7 +374,7 @@
   </footer>
 
   <!-- Include api.js to expose ApiService -->
-  <script src="api.js"></script>
+  <script src="api.js?v=prod_1"></script>
 
   <!-- Registration Submission Script -->
   <script>
@@ -396,6 +399,20 @@
         if (errorBanner) errorBanner.classList.add('hidden');
       }
 
+      // Toggle Password Visibility
+      const togglePassBtn = document.getElementById('togglePasswordBtn');
+      const passInput = document.getElementById('password');
+      const togglePassIcon = document.getElementById('togglePasswordIcon');
+      togglePassBtn?.addEventListener('click', () => {
+        if (!passInput) return;
+        const isPass = passInput.type === 'password';
+        passInput.type = isPass ? 'text' : 'password';
+        if (togglePassIcon) {
+          togglePassIcon.classList.toggle('fa-eye', !isPass);
+          togglePassIcon.classList.toggle('fa-eye-slash', isPass);
+        }
+      });
+
       regForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         clearError();
@@ -405,10 +422,11 @@
         const managerName = document.getElementById('managerName').value.trim();
         const phone = document.getElementById('phone').value.trim();
         const email = document.getElementById('email').value.trim();
-        const pin = document.getElementById('pin').value.trim();
+        const passEl = document.getElementById('password') || document.getElementById('pin');
+        const password = passEl ? passEl.value.trim() : '';
 
-        if (!pin || pin.length !== 6 || !/^\d{6}$/.test(pin)) {
-          showError('يرجى إدخال رمز PIN سري للمدير مكون من 6 أرقام تماماً.');
+        if (!password || password.length < 6) {
+          showError('يرجى إدخال كلمة مرور قوية للمدير لا تقل عن 6 خانات.');
           return;
         }
 
@@ -426,7 +444,8 @@
               managerName: managerName,
               phone: phone,
               email: email,
-              pin: pin
+              password: password,
+              pin: password
           });
 
           if (submitBtn) {

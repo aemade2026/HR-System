@@ -1,5 +1,5 @@
 // AE (HR-SYSTEM) - Service Worker (PWA)
-const CACHE_NAME = 'ae-hr-system-v3';
+const CACHE_NAME = 'ae-hr-system-v4';
 
 const ASSETS_TO_CACHE = [
   './',
@@ -20,7 +20,7 @@ const ASSETS_TO_CACHE = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('[SW] Pre-caching core offline assets v2...');
+      console.log('[SW] Pre-caching core offline assets v4...');
       return cache.addAll(ASSETS_TO_CACHE);
     }).then(() => self.skipWaiting())
   );

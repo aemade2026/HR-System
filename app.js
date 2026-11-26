@@ -272,6 +272,10 @@
       }
     }
 
+    playAlert() {
+      this.playError();
+    }
+
     playClick() {
       if (!store.state.soundEnabled) return;
       try {
@@ -452,9 +456,6 @@
       if (store.state.currentUser) {
         const fresh = res.data.find(e => e.id === store.state.currentUser.id || e.email === store.state.currentUser.email);
         if (fresh) {
-          if (fresh.email === 'aemade2016@gmail.com' || fresh.id === 'aa69f711-7ca3-41dc-b628-42a5dda853f6' || fresh.employee_code === 'EMP-0001') {
-            fresh.role = 'programmer';
-          }
           store.state.currentUser = fresh;
         }
       }
@@ -495,9 +496,18 @@
     }
   }
 
+  async function loadApplicationData() {
+    await loadSettings();
+    await loadDepartments();
+    await loadEmployees();
+    await loadAttendanceLogs();
+    await loadLeaves();
+    await loadPermissions();
+    await loadAdjustments();
+  }
+
   function getEmployeeCode(emp) {
     if (!emp) return '';
-    if (emp.email === 'aemade2016@gmail.com') return 'EMP-0001';
     if (emp.employee_code) return emp.employee_code;
     if (emp.employeeCode) return emp.employeeCode;
     const rawId = String(emp.id || '');
@@ -762,9 +772,6 @@
    */
   function resolveUserRole(user) {
     if (!user) return 'employee';
-    if (user.email === 'aemade2016@gmail.com' || user.id === 'aa69f711-7ca3-41dc-b628-42a5dda853f6' || user.employee_code === 'EMP-0001') {
-      return 'programmer';
-    }
     const r = String(user.role || '').toLowerCase();
     if (r === 'programmer' || r === 'مبرمج') {
       return 'programmer';
@@ -805,6 +812,15 @@
     // إدارة عناصر الواجهة بناءً على الصلاحيات والرتبة
     updateRoleBasedUI(roleType);
     await updateCurrentCompanyHeader(user);
+
+    // تحميل كافة بيانات وجداول النظام بعد التأكد التام من نجاح المصادقة
+    await loadApplicationData();
+
+    // تحديث بيانات المستخدم الحالي في حال تم جلبها محدثة من الموظفين
+    if (Array.isArray(store.state.employees) && store.state.employees.length > 0) {
+      const fresh = store.state.employees.find(e => e.id === user.id || e.email === user.email);
+      if (fresh) store.state.currentUser = fresh;
+    }
 
     // توجيه المستخدم حسب دوره:
     // موظف -> شاشته الشخصية فقط
@@ -1165,8 +1181,19 @@
         if (titleEl) titleEl.textContent = 'إضافة مستخدم جديد للنظام';
         const idInput = document.getElementById('empFormId');
         if (idInput) idInput.value = '';
+        const codeInput = document.getElementById('empFormCode');
+        if (codeInput) {
+          codeInput.value = 'EMP-0001';
+          ApiService.getNextEmployeeId().then(c => { if (codeInput) codeInput.value = c; });
+        }
         const pinInput = document.getElementById('empFormPin');
-        if (pinInput) pinInput.value = generateRandom6DigitPin();
+        const pinLabel = document.getElementById('empFormPinLabel');
+        if (pinLabel) pinLabel.textContent = 'رمز PIN (6 أرقام) *';
+        if (pinInput) {
+          pinInput.required = true;
+          pinInput.placeholder = '123456';
+          pinInput.value = generateRandom6DigitPin();
+        }
         modal?.classList.remove('hidden');
       }
     });
@@ -1362,37 +1389,60 @@
         const confirmed = confirm('هل أنت متأكد من اعتماد وتفعيل هذه الشركة؟\nسيتم فوراً تفعيل الشركة وإنشاء حساب رسمي للمدير المسؤول بصلاحية Admin وربطه بالشركة.');
         if (!confirmed) return;
 
+        const originalBtnHtml = target.innerHTML;
         target.disabled = true;
         target.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري الاعتماد...';
 
-        const res = await ApiService.approveTenant(companyId);
-        if (res.success) {
-          sound.playSuccess();
-          showToast(res.message || 'تم اعتماد وتفعيل الشركة بنجاح!', 'success', 5000);
-          await loadEmployees();
-          renderProgrammerTenantsTable();
-        } else {
+        try {
+          const res = await ApiService.approveTenant(companyId);
+          if (res.success) {
+            sound.playSuccess();
+            showToast(res.message || 'تم اعتماد وتفعيل الشركة بنجاح!', 'success', 5000);
+            await loadEmployees();
+            await renderProgrammerTenantsTable();
+          } else if (res.data?.pendingSync) {
+            sound.playAlert();
+            showToast(res.message || 'تم اعتماد الشركة محلياً بنجاح وجدولة المزامنة السحابية تلقائياً.', 'warning', 5000);
+            await loadEmployees();
+            await renderProgrammerTenantsTable();
+          } else {
+            sound.playError();
+            showToast(res.message || 'فشل في اعتماد الشركة', 'error');
+            target.disabled = false;
+            target.innerHTML = originalBtnHtml;
+          }
+        } catch (err) {
           sound.playError();
-          showToast(res.message || 'فشل في اعتماد الشركة', 'error');
+          showToast('حدث خطأ أثناء اعتماد الشركة', 'error');
           target.disabled = false;
+          target.innerHTML = originalBtnHtml;
         }
       } else if (action === 'prog-reject-tenant') {
         const confirmed = confirm('تحذير: هل أنت متأكد من رفض وحذف هذه الشركة نهائياً من النظام؟\nسيتم حذف الشركة وجميع بياناتها.');
         if (!confirmed) return;
 
+        const originalBtnHtml = target.innerHTML;
         target.disabled = true;
         target.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري الحذف...';
 
-        const res = await ApiService.rejectTenant(companyId);
-        if (res.success) {
-          sound.playSuccess();
-          showToast(res.message || 'تم حذف الشركة بنجاح', 'success');
-          await loadEmployees();
-          renderProgrammerTenantsTable();
-        } else {
+        try {
+          const res = await ApiService.rejectTenant(companyId);
+          if (res.success || res.data?.pendingSync) {
+            sound.playSuccess();
+            showToast(res.message || 'تم حذف الشركة بنجاح', res.data?.pendingSync ? 'warning' : 'success');
+            await loadEmployees();
+            await renderProgrammerTenantsTable();
+          } else {
+            sound.playError();
+            showToast(res.message || 'فشل في حذف الشركة', 'error');
+            target.disabled = false;
+            target.innerHTML = originalBtnHtml;
+          }
+        } catch (err) {
           sound.playError();
-          showToast(res.message || 'فشل في حذف الشركة', 'error');
+          showToast('حدث خطأ أثناء حذف الشركة', 'error');
           target.disabled = false;
+          target.innerHTML = originalBtnHtml;
         }
       }
     });
@@ -1523,7 +1573,7 @@
 
           <td class="p-3.5 font-mono whitespace-nowrap hidden md:table-cell">
             <div class="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700">
-              <span class="font-black tracking-widest text-xs">${escapeHTML(emp.pin || '1234')}</span>
+              <span class="font-bold text-xs text-slate-500">محمي (مشفر)</span>
               <i class="fa-solid fa-key text-[10px] text-amber-500" title="رمز الدخول"></i>
             </div>
           </td>
@@ -1580,7 +1630,7 @@
                 </div>
                 <div>
                   <span class="text-slate-500 font-medium block text-[11px]">رمز الـ PIN:</span>
-                  <span class="font-mono font-black text-amber-600 dark:text-amber-400">${escapeHTML(emp.pin || '1234')}</span>
+                  <span class="font-bold text-xs text-slate-500">محمي (مشفر)</span>
                 </div>
                 <div class="col-span-2 sm:col-span-1">
                   <span class="text-slate-500 font-medium block text-[11px]">البريد الإلكتروني:</span>
@@ -1625,10 +1675,10 @@
 
     document.getElementById('progResetPinUserId').value = emp.id;
     document.getElementById('progResetPinUserName').textContent = emp.fullName;
-    document.getElementById('progResetPinUserCode').textContent = emp.id;
+    document.getElementById('progResetPinUserCode').textContent = getEmployeeCode(emp);
     document.getElementById('progResetPinUserRole').textContent = resolveUserRole(emp) === 'programmer' ? 'مبرمج' : (resolveUserRole(emp) === 'manager' ? 'مدير' : 'موظف');
     document.getElementById('progResetPinUserAvatar').src = getEmployeeAvatar(emp);
-    document.getElementById('progResetPinInput').value = emp.pin || '1234';
+    document.getElementById('progResetPinInput').value = '';
 
     modal.classList.remove('hidden');
   }
@@ -2198,12 +2248,12 @@
         if (!companyName || companyName.includes('?') || companyName.includes('')) {
           companyName = 'AE (HR-SYSTEM)';
         }
-        let managerName = t.managerName || t.manager_name || 'م. أحمد عماد';
-        if (!managerName || managerName.includes('?') || managerName.includes('')) {
-          managerName = (t.id === '11111111-2222-3333-4444-555555555555' || t.pin === '050298' || t.email === 'aemade2016@gmail.com') ? 'م. أحمد عماد' : 'المدير العام';
+        let managerName = t.managerName || t.manager_name || 'المدير العام';
+        if (!managerName || managerName.includes('?') || /\uFFFD/.test(managerName)) {
+          managerName = 'المدير العام';
         }
-        const taxNum = t.taxNumber || t.tax_number || '492-710-853';
-        const pinCode = t.pin ? String(t.pin).trim() : '050298';
+        const taxNum = t.taxNumber || t.tax_number || 'غير مسجل';
+        const hasPassword = Boolean(t.password || t.pin);
         const regDate = t.createdAt ? String(t.createdAt).split('T')[0] : '--';
 
         const statusBadge = isPending
@@ -2252,8 +2302,10 @@
                 <i class="fa-solid fa-user-tie text-blue-600 dark:text-blue-400 text-xs"></i>
                 <span>${escapeHTML(managerName)}</span>
               </div>
-              <div class="text-[11px] text-slate-500 font-mono mt-0.5">
-                رمز PIN: <span class="font-bold text-blue-600 dark:text-blue-400">${escapeHTML(pinCode)}</span>
+              <div class="text-[11px] text-slate-500 font-mono mt-0.5 flex items-center gap-1">
+                <i class="fa-solid fa-lock text-[10px] text-slate-400"></i>
+                <span>كلمة المرور:</span>
+                <span class="font-bold ${hasPassword ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}">${hasPassword ? '•••••• (محددة)' : 'غير محددة'}</span>
               </div>
             </td>
             <td class="p-3.5 hidden md:table-cell">
@@ -2458,6 +2510,31 @@
    * Switch between Auth Portal, Employee Self-Service Portal, and Admin Management Portal.
    * @param {'auth'|'employee'|'admin'} portalName
    */
+  function resetAuthLoginForm() {
+    const passInput = document.getElementById('authPasswordInput');
+    const authErr = document.getElementById('authErrorMessage');
+    if (passInput) passInput.value = '';
+    if (authErr) authErr.classList.add('hidden');
+    const emailInput = document.getElementById('authEmailInput');
+    if (emailInput && !emailInput.value) {
+      try {
+        const raw = localStorage.getItem('JISR_DEVICE_BIO_EMP');
+        if (raw) {
+          const bioEmp = JSON.parse(raw);
+          if (bioEmp?.employee_code) {
+            emailInput.value = bioEmp.employee_code;
+          }
+        }
+      } catch (e) {}
+    }
+  }
+
+  function resetAuthPin() {
+    resetAuthLoginForm();
+  }
+  window.resetAuthLoginForm = resetAuthLoginForm;
+  window.resetAuthPin = resetAuthPin;
+
   function switchPortal(portalName) {
     const authPortal = document.getElementById('portal-auth');
     const empPortal = document.getElementById('portal-employee');
@@ -2480,7 +2557,7 @@
       authPortal?.classList.remove('hidden');
       empPortal?.classList.add('hidden');
       adminPortal?.classList.add('hidden');
-      resetAuthPin();
+      resetAuthLoginForm();
       populateAuthBioSelect();
     } else if (portalName === 'employee') {
       empPortal?.classList.remove('hidden');
@@ -2505,29 +2582,12 @@
    */
   async function checkInitialSession() {
     try {
-      // إصلاح فوري وتلقائي لجلسة المبرمج إذا كان مخزناً كـ employee سابقاً
-      try {
-        const rawLocal = localStorage.getItem('JISR_AUTH_SESSION');
-        const rawSession = sessionStorage.getItem('JISR_AUTH_SESSION');
-        const sObj = JSON.parse(rawLocal || rawSession || 'null');
-        if (sObj && (sObj.email === 'aemade2016@gmail.com' || sObj.employeeId === 'EMP-0001' || sObj.employeeId === 'aa69f711-7ca3-41dc-b628-42a5dda853f6')) {
-          sObj.role = 'programmer';
-          sObj.normalizedRole = 'programmer';
-          sObj.employeeId = 'aa69f711-7ca3-41dc-b628-42a5dda853f6';
-          if (rawLocal) localStorage.setItem('JISR_AUTH_SESSION', JSON.stringify(sObj));
-          if (rawSession) sessionStorage.setItem('JISR_AUTH_SESSION', JSON.stringify(sObj));
-        }
-      } catch (e) {}
-
       const res = await ApiService.getCurrentSession();
       const user = res.user || res.data?.user || res.employee || res.data?.employee;
       const session = res.session || res.data?.session;
       if (res.success && user && session) {
         // Sync with freshest employee data from local store
         let freshUser = store.state.employees.find(e => e.id === user.id || e.email === user.email) || user;
-        if (freshUser.email === 'aemade2016@gmail.com' || freshUser.id === 'aa69f711-7ca3-41dc-b628-42a5dda853f6' || freshUser.employee_code === 'EMP-0001') {
-          freshUser.role = 'programmer';
-        }
         store.state.currentUser = freshUser;
         store.state.currentSession = session;
         const permissions = res.data?.permissions || res.permissions;
@@ -2548,11 +2608,29 @@
     const sel = document.getElementById('authBioEmpSelect');
     if (!sel) return;
     sel.innerHTML = '';
-    const activeEmployees = store.state.employees.filter(e => e.status !== 'pending');
+
+    let rememberedBioEmp = null;
+    try {
+      const raw = localStorage.getItem('JISR_DEVICE_BIO_EMP');
+      if (raw) rememberedBioEmp = JSON.parse(raw);
+    } catch (e) {}
+
+    const activeEmployees = (store.state.employees || []).filter(e => e.status !== 'pending');
+
+    if (activeEmployees.length === 0 && rememberedBioEmp) {
+      const opt = document.createElement('option');
+      opt.value = rememberedBioEmp.id;
+      const code = rememberedBioEmp.employee_code || '';
+      opt.textContent = `${rememberedBioEmp.fullName || 'موظف مسجل'} (${code ? code + ' - ' : ''}بصمة مفعلة على هذا الجهاز)`;
+      opt.selected = true;
+      sel.appendChild(opt);
+      return;
+    }
+
     activeEmployees.forEach(emp => {
       const opt = document.createElement('option');
       opt.value = emp.id;
-      const isProgrammer = (emp.email === 'aemade2016@gmail.com' || emp.role === 'programmer' || emp.id === 'aa69f711-7ca3-41dc-b628-42a5dda853f6' || emp.employee_code === 'EMP-0001');
+      const isProgrammer = (emp.role === 'programmer');
       const isManager = !isProgrammer && (emp.role === 'hr' || emp.role === 'manager' || emp.role === 'admin');
       const roleArabic = isProgrammer 
         ? 'مدير نظام / مبرمج (Programmer)' 
@@ -2560,98 +2638,31 @@
         ? 'مدير (Manager)' 
         : 'موظف (Employee)';
       const code = getEmployeeCode(emp);
-      opt.textContent = `${emp.fullName} (${code} - ${roleArabic})`;
+      const name = emp.fullName || `${emp.first_name || ''} ${emp.last_name || ''}`.trim() || 'موظف';
+      opt.textContent = `${name} (${code} - ${roleArabic})`;
+      if (rememberedBioEmp && (rememberedBioEmp.id === emp.id || rememberedBioEmp.employee_code === code)) {
+        opt.selected = true;
+      }
       sel.appendChild(opt);
     });
+
+    if (sel.options.length === 0 && rememberedBioEmp) {
+      const opt = document.createElement('option');
+      opt.value = rememberedBioEmp.id;
+      const code = rememberedBioEmp.employee_code || '';
+      opt.textContent = `${rememberedBioEmp.fullName || 'موظف مسجل'} (${code ? code + ' - ' : ''}بصمة مفعلة)`;
+      opt.selected = true;
+      sel.appendChild(opt);
+    }
   }
 
   /**
    * Render dynamic 1-Click Fast Access login buttons & PIN chips based on registered users.
    */
   function renderQuickLoginShortcuts() {
-    const grid = document.getElementById('quickLoginButtonsWrapper');
-    if (!grid) return;
-
-    const employees = store.state.employees || [];
-    const activeEmployees = employees.filter(e => e.status !== 'pending' && e.status !== 'suspended');
-
-    if (activeEmployees.length === 0) {
-      grid.className = 'grid grid-cols-1 gap-2.5';
-      grid.innerHTML = `
-        <div class="text-center text-xs text-slate-500 dark:text-slate-400 py-2.5 bg-slate-100/80 dark:bg-slate-800/60 rounded-xl font-bold">
-          <i class="fa-solid fa-user-slash ml-1 text-slate-400"></i>
-          لا يوجد موظفون مسجلون حالياً
-        </div>
-      `;
-      return;
-    }
-
-    // Separate users by role: Admin/Manager vs regular Employee
-    const adminUser = activeEmployees.find(e => e.email === 'aemade2016@gmail.com' || e.role === 'programmer' || e.id === 'aa69f711-7ca3-41dc-b628-42a5dda853f6' || e.employee_code === 'EMP-0001')
-      || activeEmployees.find(e => e.role === 'admin' || e.role === 'manager') 
-      || activeEmployees[0];
-    const otherUsers = activeEmployees.filter(e => e.id !== adminUser?.id && e.email !== adminUser?.email);
-    const regularUser = otherUsers.find(e => e.email !== 'aemade2016@gmail.com' && (e.role === 'employee' || e.role === 'sales' || e.employee_code === 'EMP-1001')) 
-      || otherUsers[0];
-
-    const usersToShow = [];
-    if (adminUser) usersToShow.push({ user: adminUser, type: 'admin' });
-    if (regularUser) usersToShow.push({ user: regularUser, type: 'employee' });
-
-    // Set responsive grid columns: 1 column if 1 user, 2 columns if 2 users
-    grid.className = usersToShow.length === 1 
-      ? 'grid grid-cols-1 gap-2.5' 
-      : 'grid grid-cols-1 sm:grid-cols-2 gap-2.5';
-
-    grid.innerHTML = usersToShow.map(({ user, type }) => {
-      const isManager = type === 'admin';
-      const roleText = (user.role === 'programmer' || user.role === 'admin') 
-        ? 'كمسؤول' 
-        : (user.role === 'manager' ? 'كمدير' : 'كموظف');
-      const cleanName = (user.fullName || '').trim();
-      const displayName = cleanName.length > 18 ? cleanName.split(' ')[0] : cleanName;
-      const bgClass = isManager 
-        ? 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 shadow-purple-500/20' 
-        : 'bg-gradient-to-r from-blue-600 to-teal-600 hover:from-blue-700 hover:to-teal-700 shadow-blue-500/20';
-      const icon = isManager ? 'fa-user-shield' : 'fa-user';
-
-      return `
-        <button type="button" data-quick-user-id="${escapeHTML(user.id)}" class="py-2.5 px-3 rounded-xl ${bgClass} text-white font-bold text-xs shadow-md flex items-center justify-center gap-1.5 transition-all active:scale-95 truncate" title="دخول سريع: ${escapeHTML(user.fullName)}">
-          <i class="fa-solid ${icon} text-xs shrink-0"></i>
-          <span class="truncate">دخول ${roleText} (${escapeHTML(displayName)})</span>
-        </button>
-      `;
-    }).join('');
-
-    // Bind click events to login instantly
-    grid.querySelectorAll('[data-quick-user-id]').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const userId = btn.dataset.quickUserId;
-        const targetEmp = activeEmployees.find(e => e.id === userId);
-        if (!targetEmp) return;
-
-        sound.playClick();
-        showToast(`جاري تسجيل الدخول السريع: ${targetEmp.fullName}...`, 'info', 1500);
-
-        const res = await ApiService.loginWithFingerprint(targetEmp.id, true);
-        const user = res.user || res.data?.user || res.employee || res.data?.employee;
-        if (res.success && user) {
-          sound.playSuccess();
-          const permissions = res.data?.permissions || res.permissions;
-          showToast(`مرحباً يا ${user.fullName}! تم تسجيل الدخول بنجاح`, 'success', 3000);
-          await applyUserRoleAndNavigate(user, permissions);
-        } else {
-          sound.playError();
-          showToast(res.message || 'فشل تسجيل الدخول السريع', 'error', 3500);
-        }
-      });
-    });
+    // Quick login shortcuts removed for production Supabase Auth security
   }
 
-  /**
-   * استدعاء واجهة بصمة الجهاز الأصلية (Android BiometricPrompt / iOS FaceID/TouchID / Windows Hello)
-   * تفعيل مستشعر البصمة المدمج بالهاتف مباشرة ومنع ظهور رسالة "No passkeys available"
-   */
   async function requestDeviceBiometricVerification(empId, empName) {
     if (!window.PublicKeyCredential || !navigator.credentials) {
       throw new Error('NOT_SUPPORTED');
@@ -2675,110 +2686,148 @@
       window.crypto.getRandomValues(challenge);
     }
 
-    const storageKey = 'AE_DEVICE_PASSKEY_' + (empId || 'default');
-    const savedKey = localStorage.getItem(storageKey);
-
-    // 1. إذا كان الموظف قد سجّل بصمة على هذا الجهاز مسبقاً، نطلب التحقق منها
-    if (savedKey) {
-      try {
-        const credIdBytes = Uint8Array.from(atob(savedKey), c => c.charCodeAt(0));
-        const getOptions = {
-          publicKey: {
-            challenge: challenge,
-            timeout: 60000,
-            userVerification: 'required',
-            allowCredentials: [{
-              id: credIdBytes,
-              type: 'public-key',
-              transports: ['internal']
-            }]
-          }
-        };
-
-        const assertion = await navigator.credentials.get(getOptions);
-        if (assertion) {
-          return { success: true, credential: assertion };
-        }
-      } catch (getErr) {
-        console.warn('[Device Biometrics] get() failed or key cleared, falling back to create():', getErr);
-      }
-    }
-
-    // 2. تفعيل مستشعر بصمة الهاتف الأصلي (BiometricPrompt) مباشرة عبر create() مع platform authenticator
-    // هذا الاستدعاء يُجبر الهاتف على فتح شاشة مسح البصمة مباشرة دون البحث عن أجهزة أخرى
-    const cleanId = String(empId || 'emp_user').replace(/[^\w-]/g, '_');
-    const cleanName = (empName || 'موظف').toString().replace(/[^\w\s-]/g, '').trim() || cleanId;
-
-    const createOptions = {
-      publicKey: {
-        challenge: challenge,
-        rp: {
-          name: "AE (HR-SYSTEM)"
-        },
-        user: {
-          id: new TextEncoder().encode(cleanId),
-          name: cleanId + '@ae-hr.local',
-          displayName: cleanName
-        },
-        pubKeyCredParams: [
-          { type: "public-key", alg: -7 },   // ES256 (Android, iOS)
-          { type: "public-key", alg: -257 }  // RS256 (Windows Hello)
-        ],
-        authenticatorSelection: {
-          authenticatorAttachment: "platform", // بصمة الجهاز المدمجة (يمنع No passkeys / Use different device)
-          userVerification: "required",        // إلزام البصمة أو قفل الشاشة
-          residentKey: "preferred"
-        },
-        timeout: 60000,
-        attestation: "none"
-      }
+    const publicKeyCredentialRequestOptions = {
+      challenge: challenge,
+      timeout: 60000,
+      userVerification: 'required',
+      rpId: window.location.hostname || 'localhost'
     };
 
-    const newCredential = await navigator.credentials.create(createOptions);
-    if (newCredential && newCredential.rawId) {
-      const base64Id = btoa(String.fromCharCode(...new Uint8Array(newCredential.rawId)));
-      localStorage.setItem(storageKey, base64Id);
-      return { success: true, credential: newCredential };
-    }
-
-    throw new Error('BIOMETRICS_FAILED');
+    return await navigator.credentials.get({
+      publicKey: publicKeyCredentialRequestOptions
+    });
   }
 
-  /**
-   * Setup Creative Auth Portal (Biometric + 6-digit PIN Numpad).
-   */
   function setupAuthPortal() {
+    const authTabEmailBtn = document.getElementById('authTabEmailBtn');
     const authTabBioBtn = document.getElementById('authTabBioBtn');
-    const authTabPinBtn = document.getElementById('authTabPinBtn');
+    const authEmailView = document.getElementById('authEmailView');
     const authBioView = document.getElementById('authBioView');
-    const authPinView = document.getElementById('authPinView');
+    const authEmailLoginForm = document.getElementById('authEmailLoginForm');
+    const authEmailInput = document.getElementById('authEmailInput');
+    const authPasswordInput = document.getElementById('authPasswordInput');
+    const authPasswordToggleBtn = document.getElementById('authPasswordToggleBtn');
+    const authEmailLoginBtn = document.getElementById('authEmailLoginBtn');
+    const authErrorMessage = document.getElementById('authErrorMessage');
+    const authErrorText = document.getElementById('authErrorText');
+    const authRememberMeCheck = document.getElementById('authRememberMeCheck');
     const authScannerWidget = document.getElementById('authScannerWidget');
     const authBioLoginBtn = document.getElementById('authBioLoginBtn');
-    const authRememberMeCheck = document.getElementById('authRememberMeCheck');
 
-    // Dual Tab Switching
+    // Dual Tab Switching (Email+Password as default, Biometrics as secondary)
+    authTabEmailBtn?.addEventListener('click', () => {
+      sound.playClick();
+      authTabEmailBtn.classList.add('bg-white', 'dark:bg-slate-700', 'text-blue-600', 'dark:text-blue-400', 'shadow-sm');
+      authTabEmailBtn.classList.remove('text-slate-700', 'dark:text-slate-300');
+      authTabBioBtn?.classList.remove('bg-white', 'dark:bg-slate-700', 'text-blue-600', 'dark:text-blue-400', 'shadow-sm');
+      authTabBioBtn?.classList.add('text-slate-700', 'dark:text-slate-300');
+      authEmailView?.classList.remove('hidden');
+      authBioView?.classList.add('hidden');
+    });
+
     authTabBioBtn?.addEventListener('click', () => {
       sound.playClick();
       authTabBioBtn.classList.add('bg-white', 'dark:bg-slate-700', 'text-blue-600', 'dark:text-blue-400', 'shadow-sm');
       authTabBioBtn.classList.remove('text-slate-700', 'dark:text-slate-300');
-      authTabPinBtn.classList.remove('bg-white', 'dark:bg-slate-700', 'text-blue-600', 'dark:text-blue-400', 'shadow-sm');
-      authTabPinBtn.classList.add('text-slate-700', 'dark:text-slate-300');
+      authTabEmailBtn?.classList.remove('bg-white', 'dark:bg-slate-700', 'text-blue-600', 'dark:text-blue-400', 'shadow-sm');
+      authTabEmailBtn?.classList.add('text-slate-700', 'dark:text-slate-300');
       authBioView?.classList.remove('hidden');
-      authPinView?.classList.add('hidden');
+      authEmailView?.classList.add('hidden');
     });
 
-    authTabPinBtn?.addEventListener('click', () => {
+    // Toggle Password Visibility
+    authPasswordToggleBtn?.addEventListener('click', () => {
       sound.playClick();
-      authTabPinBtn.classList.add('bg-white', 'dark:bg-slate-700', 'text-blue-600', 'dark:text-blue-400', 'shadow-sm');
-      authTabPinBtn.classList.remove('text-slate-700', 'dark:text-slate-300');
-      authTabBioBtn.classList.remove('bg-white', 'dark:bg-slate-700', 'text-blue-600', 'dark:text-blue-400', 'shadow-sm');
-      authTabBioBtn.classList.add('text-slate-700', 'dark:text-slate-300');
-      authPinView?.classList.remove('hidden');
-      authBioView?.classList.add('hidden');
-      resetAuthPin();
+      if (!authPasswordInput) return;
+      const isPass = authPasswordInput.type === 'password';
+      authPasswordInput.type = isPass ? 'text' : 'password';
+      const icon = authPasswordToggleBtn.querySelector('i');
+      if (icon) {
+        icon.className = isPass ? 'fa-solid fa-eye-slash text-xs' : 'fa-solid fa-eye text-xs';
+      }
     });
 
-    // Biometric Login via WebAuthn API (Local Device Biometrics) with Graceful PIN Fallback
+    // Official Supabase Auth Code/Email + Password Login Handler
+    const handleEmailPasswordLogin = async (e) => {
+      if (e) e.preventDefault();
+      const identifier = String(authEmailInput?.value || '').trim();
+      const password = String(authPasswordInput?.value || '');
+
+      if (!identifier || !password) {
+        if (authErrorMessage && authErrorText) {
+          authErrorText.textContent = 'يرجى إدخال كود الموظف أو البريد الإلكتروني وكلمة المرور';
+          authErrorMessage.classList.remove('hidden');
+        }
+        showToast('يرجى إدخال كود الموظف أو البريد الإلكتروني وكلمة المرور', 'warning');
+        return;
+      }
+
+      if (authErrorMessage) authErrorMessage.classList.add('hidden');
+
+      const origBtnHtml = authEmailLoginBtn ? authEmailLoginBtn.innerHTML : '';
+      if (authEmailLoginBtn) {
+        authEmailLoginBtn.disabled = true;
+        authEmailLoginBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>جاري التحقق...</span>';
+      }
+
+      sound.playClick();
+
+      try {
+        const rememberMe = authRememberMeCheck ? authRememberMeCheck.checked : true;
+        const res = await ApiService.loginWithCodeOrEmail(identifier, password, rememberMe);
+
+        if (res.success) {
+          sound.playSuccess();
+          const user = res.user || res.data?.user || res.employee || res.data?.employee;
+          const permissions = res.data?.permissions || res.permissions;
+
+          // حفظ هوية الموظف الأساسية بأمان للجهاز (دون كلمة المرور) لتفعيل البصمة
+          try {
+            if (user) {
+              const bioEmp = {
+                id: user.id,
+                employee_code: getEmployeeCode(user),
+                fullName: user.fullName || `${user.first_name || ''} ${user.last_name || ''}`.trim()
+              };
+              localStorage.setItem('JISR_DEVICE_BIO_EMP', JSON.stringify(bioEmp));
+            }
+          } catch (e) {}
+
+          showToast(`مرحباً بك مجدداً يا ${user?.fullName || 'المستخدم'}! تم تسجيل الدخول بنجاح`, 'success', 3000);
+          await applyUserRoleAndNavigate(user, permissions);
+        } else {
+          sound.playError();
+          const errMsg = res.message || res.error || 'فشل تسجيل الدخول، يرجى التأكد من صحة البيانات';
+          if (authErrorMessage && authErrorText) {
+            authErrorText.textContent = errMsg;
+            authErrorMessage.classList.remove('hidden');
+          }
+          showToast(errMsg, 'error', 4000);
+        }
+      } catch (err) {
+        sound.playError();
+        const errMsg = err?.message || 'حدث خطأ غير متوقع أثناء تسجيل الدخول';
+        if (authErrorMessage && authErrorText) {
+          authErrorText.textContent = errMsg;
+          authErrorMessage.classList.remove('hidden');
+        }
+        showToast(errMsg, 'error', 4000);
+      } finally {
+        if (authEmailLoginBtn) {
+          authEmailLoginBtn.disabled = false;
+          authEmailLoginBtn.innerHTML = origBtnHtml;
+        }
+      }
+    };
+
+    authEmailLoginForm?.addEventListener('submit', handleEmailPasswordLogin);
+    authEmailLoginBtn?.addEventListener('click', (e) => {
+      if (authEmailLoginForm && !authEmailLoginForm.contains(e.target)) {
+        handleEmailPasswordLogin(e);
+      }
+    });
+
+    // Biometric Login via WebAuthn API (Kiosk/Sensor fallback)
     const executeBioLogin = async () => {
       const sel = document.getElementById('authBioEmpSelect');
       const empId = sel?.value;
@@ -2795,7 +2844,6 @@
         await requestDeviceBiometricVerification(empId, empName);
         authScannerWidget?.classList.remove('scanning');
 
-        // في حال نجاح بصمة الجهاز (Success):
         const rememberMe = authRememberMeCheck ? authRememberMeCheck.checked : true;
         const res = await ApiService.loginWithFingerprint(empId, rememberMe);
         const user = res.user || res.data?.user || res.employee || res.data?.employee;
@@ -2806,147 +2854,39 @@
           await applyUserRoleAndNavigate(user, permissions);
         } else {
           sound.playError();
-          showToast(res.message || res.error || 'فشل تسجيل الدخول', 'error', 3500);
+          const errMsg = res.message || res.error || 'فشل تسجيل الدخول';
+          if (res.sessionExpired) {
+            showToast('انتهت جلسة المصادقة الأمنية على هذا الجهاز. يرجى تسجيل الدخول بكود الموظف وكلمة المرور لتجديد تفعيل البصمة.', 'warning', 5000);
+            authTabEmailBtn?.click();
+            if (authEmailInput) {
+              const selectedEmp = (store.state.employees || []).find(e => e.id === empId);
+              let rememberedCode = selectedEmp ? getEmployeeCode(selectedEmp) : '';
+              if (!rememberedCode) {
+                try {
+                  const saved = JSON.parse(localStorage.getItem('JISR_DEVICE_BIO_EMP') || '{}');
+                  rememberedCode = saved.employee_code || '';
+                } catch (e) {}
+              }
+              if (rememberedCode) authEmailInput.value = rememberedCode;
+              authPasswordInput?.focus();
+            }
+          } else {
+            showToast(errMsg, 'error', 3500);
+          }
         }
       } catch (bioErr) {
         authScannerWidget?.classList.remove('scanning');
         console.warn('[WebAuthn Biometrics Fallback]:', bioErr);
         sound.playAlert();
-
-        if (bioErr && (bioErr.name === 'NotAllowedError' || bioErr.name === 'AbortError')) {
-          showToast('تم إلغاء طلب بصمة الجهاز. يمكنك المحاولة مجدداً أو إدخال رمز PIN', 'warning', 4000);
-        } else if (bioErr && bioErr.message === 'NO_PLATFORM_AUTHENTICATOR') {
-          authTabPinBtn?.click();
-          showToast('هذا الجهاز لا يدعم البصمة المدمجة، يرجى إدخال رمز الـ PIN', 'warning', 4000);
-        } else {
-          authTabPinBtn?.click();
-          showToast('تعذر التحقق من بصمة الجهاز، يرجى إدخال رمز الـ PIN', 'warning', 4000);
-        }
+        showToast('تعذر التحقق من بصمة الجهاز، يرجى تسجيل الدخول بكود الموظف أو البريد وكلمة المرور', 'warning', 4000);
+        authTabEmailBtn?.click();
       }
     };
 
     authScannerWidget?.addEventListener('click', executeBioLogin);
     authBioLoginBtn?.addEventListener('click', executeBioLogin);
-
-    // Dynamic 1-Click Fast Access Buttons & PIN Chips
-    renderQuickLoginShortcuts();
-
-    // 6-Digit PIN Numpad Handlers
-    const authNumpadBtns = document.querySelectorAll('.auth-numpad-btn[data-num]');
-    const authPinClearBtn = document.getElementById('authPinClearBtn');
-    const authPinBackspaceBtn = document.getElementById('authPinBackspaceBtn');
-
-    authNumpadBtns.forEach(btn => {
-      btn.addEventListener('click', () => {
-        sound.playClick();
-        const num = btn.dataset.num;
-        if (store.state.authPinInput.length < 6) {
-          store.state.authPinInput += num;
-          updateAuthPinDots();
-          if (store.state.authPinInput.length === 6) {
-            submitAuthPinLogin();
-          }
-        }
-      });
-    });
-
-    authPinClearBtn?.addEventListener('click', () => {
-      sound.playClick();
-      resetAuthPin();
-    });
-
-    authPinBackspaceBtn?.addEventListener('click', () => {
-      sound.playClick();
-      if (store.state.authPinInput.length > 0) {
-        store.state.authPinInput = store.state.authPinInput.slice(0, -1);
-        updateAuthPinDots();
-      }
-    });
-
-    // Submit Button for PIN
-    const authPinSubmitBtn = document.getElementById('authPinSubmitBtn');
-    authPinSubmitBtn?.addEventListener('click', () => {
-      sound.playClick();
-      submitAuthPinLogin();
-    });
-
-    // Keyboard support for Auth PIN
-    window.addEventListener('keydown', (e) => {
-      if (store.state.currentPortal !== 'auth') return;
-      if (authPinView?.classList.contains('hidden')) return;
-
-      if (/^[0-9]$/.test(e.key)) {
-        sound.playClick();
-        if (store.state.authPinInput.length < 6) {
-          store.state.authPinInput += e.key;
-          updateAuthPinDots();
-          if (store.state.authPinInput.length === 6) {
-            submitAuthPinLogin();
-          }
-        }
-      } else if (e.key === 'Backspace') {
-        sound.playClick();
-        if (store.state.authPinInput.length > 0) {
-          store.state.authPinInput = store.state.authPinInput.slice(0, -1);
-          updateAuthPinDots();
-        }
-      } else if (e.key === 'Enter') {
-        sound.playClick();
-        submitAuthPinLogin();
-      } else if (e.key === 'Escape') {
-        resetAuthPin();
-      }
-    });
   }
 
-  function updateAuthPinDots() {
-    const dots = document.querySelectorAll('#authPinDots .pin-dot');
-    dots.forEach((dot, idx) => {
-      if (idx < store.state.authPinInput.length) {
-        dot.classList.add('filled');
-      } else {
-        dot.classList.remove('filled');
-      }
-    });
-  }
-
-  function resetAuthPin() {
-    store.state.authPinInput = '';
-    updateAuthPinDots();
-  }
-
-  async function submitAuthPinLogin(directPin = null) {
-    const pin = directPin || store.state.authPinInput;
-    if (!pin || pin.length < 4 || pin.length > 6) {
-      showToast('يرجى إدخال رمز PIN المكون من 4 إلى 6 أرقام', 'warning');
-      return;
-    }
-    const authRememberMeCheck = document.getElementById('authRememberMeCheck');
-    const rememberMe = authRememberMeCheck ? authRememberMeCheck.checked : true;
-    const res = await ApiService.loginWithPin(pin, rememberMe);
-    const user = res.user || res.data?.user || res.employee || res.data?.employee;
-
-    if (res.success && user) {
-      sound.playSuccess();
-      resetAuthPin();
-      const permissions = res.data?.permissions || res.permissions;
-      showToast(`تم تسجيل الدخول بنجاح! مرحباً ${user.fullName}`, 'success', 3000);
-      await applyUserRoleAndNavigate(user, permissions);
-    } else {
-      sound.playError();
-      const dotsContainer = document.getElementById('authPinDots');
-      dotsContainer?.classList.add('shake');
-      showToast(res.message || res.error || 'رمز PIN غير صحيح', 'error', 3500);
-      setTimeout(() => {
-        dotsContainer?.classList.remove('shake');
-        resetAuthPin();
-      }, 500);
-    }
-  }
-
-  /**
-   * Setup New Employee Onboarding 2-step Wizard Modal.
-   */
   function setupOnboardingWizard() {
     const modal = document.getElementById('onboardingModal');
     const closeBtn = document.getElementById('closeOnboardingModalBtn');
@@ -3255,29 +3195,15 @@
             performGpsPunch(coords);
           },
           err => {
-            console.warn('Geolocation warning (using authorized default HQ):', err);
-            const hqLat = Number(store.state.settings?.company_lat || 30.044420);
-            const hqLng = Number(store.state.settings?.company_lng || 31.235810);
-            const fallbackCoords = {
-              lat: hqLat,
-              lng: hqLng,
-              label: store.state.settings?.companyAddress || 'المقر الرئيسي المعتمد - التجمع الخامس، القاهرة',
-              accuracy: 7
-            };
-            performGpsPunch(fallbackCoords);
+            console.warn('Geolocation error / permission denied:', err);
+            sound.playError();
+            showToast('تعذر تحديد موقعك عبر الـ GPS. يرجى تفعيل خدمة الموقع (GPS) في جهازك والسماح للمتصفح بالوصول إليه لتسجيل البصمة.', 'error', 4500);
           },
           { enableHighAccuracy: true, timeout: 6000 }
         );
       } else {
-        const hqLat = Number(store.state.settings?.company_lat || 30.044420);
-        const hqLng = Number(store.state.settings?.company_lng || 31.235810);
-        const fallbackCoords = {
-          lat: hqLat,
-          lng: hqLng,
-          label: store.state.settings?.companyAddress || 'المقر الرئيسي المعتمد - القاهرة',
-          accuracy: 8
-        };
-        performGpsPunch(fallbackCoords);
+        sound.playError();
+        showToast('المتصفح أو الجهاز لا يدعم تحديد الموقع الجغرافي (GPS). يرجى استخدام متصفح حديث لتسجيل البصمة.', 'error', 4500);
       }
     });
 
@@ -3546,7 +3472,7 @@
     const roleSwitchContainer = document.getElementById('empRoleSwitchContainer');
 
     if (welcomeEl) welcomeEl.textContent = `أهلاً بك، ${emp.fullName}`;
-    if (idBadgeEl) idBadgeEl.textContent = emp.id;
+    if (idBadgeEl) idBadgeEl.textContent = getEmployeeCode(emp);
     if (jobDeptEl) jobDeptEl.textContent = `${emp.jobTitle || 'موظف'} • ${emp.department || 'عام'}`;
     if (avatarImg) avatarImg.src = getEmployeeAvatar(emp);
 
@@ -5822,9 +5748,15 @@
 
     form?.addEventListener('submit', async (e) => {
       e.preventDefault();
+      const empSelect = document.getElementById('manualPunchEmpSelect');
+      const selectedEmpId = empSelect?.value;
+      if (!selectedEmpId) {
+        showToast('يرجى اختيار الموظف أولاً', 'error');
+        return;
+      }
       const payload = {
         id: document.getElementById('manualPunchId').value || null,
-        employeeId: document.getElementById('manualPunchEmpSelect').value,
+        employeeId: selectedEmpId,
         date: document.getElementById('manualPunchDate').value,
         checkIn: document.getElementById('manualPunchCheckIn').value ? `${document.getElementById('manualPunchCheckIn').value}:00` : null,
         checkOut: document.getElementById('manualPunchCheckOut').value ? `${document.getElementById('manualPunchCheckOut').value}:00` : null,
@@ -5837,12 +5769,13 @@
       const res = await ApiService.saveManualAttendance(payload);
       if (res.success) {
         sound.playSuccess();
-        showToast('تم حفظ سجل الحضور اليدوي بنجاح', 'success');
+        showToast('تم حفظ سجل الحضور بنجاح', 'success');
         modal?.classList.add('hidden');
         await loadAttendanceLogs();
         renderAttendanceTable();
       } else {
-        showToast(res.message, 'error');
+        sound.playError();
+        showToast(res.message || 'فشل في حفظ سجل الحضور', 'error');
       }
     });
 
@@ -5904,12 +5837,14 @@
       }
 
       const childId = `att-child-${rec.id || idx}`;
+      const attEmp = (store.state.employees || []).find(e => e.id === rec.employeeId || e.id === rec.employee_id || e.employee_code === rec.employeeId);
+      const attEmpCode = (attEmp ? getEmployeeCode(attEmp) : null) || rec.employeeCode || rec.employee_code || rec.employeeId;
 
       return `
         <tr class="table-parent-row bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/60 transition-colors cursor-pointer md:cursor-default" data-child-id="${childId}">
           <td class="p-2 sm:p-2.5 font-bold text-slate-900 dark:text-white">
             <div class="text-xs sm:text-sm font-bold truncate max-w-[130px] sm:max-w-none">${escapeHTML(rec.employeeName)}</div>
-            <div class="text-[11px] text-slate-500 dark:text-slate-400 font-mono font-bold mt-0.5 tabular-nums num-display">${escapeHTML(rec.employeeId)}</div>
+            <div class="text-[11px] text-slate-500 dark:text-slate-400 font-mono font-bold mt-0.5 tabular-nums num-display">${escapeHTML(attEmpCode)}</div>
           </td>
           <td class="p-2 sm:p-2.5 hidden md:table-cell">
             <div class="font-mono text-slate-700 dark:text-slate-300 font-bold text-xs tabular-nums num-display">${escapeHTML(rec.date)}</div>
@@ -5978,7 +5913,6 @@
                   <span class="text-slate-500 dark:text-slate-400 block text-[11px] font-medium">دقة وتحديد الموقع:</span>
                   <span class="font-semibold text-slate-800 dark:text-slate-200">${rec.location_coords?.label ? escapeHTML(rec.location_coords.label) : 'محطة مركزية'}</span>
                 </div>
-              </div>
                 <div>
                   <span class="text-slate-500 dark:text-slate-400 block text-[11px] font-medium">العمل الإضافي:</span>
                   <span class="font-mono font-bold text-emerald-600 dark:text-emerald-400">${rec.overtimeHours || 0} س</span>
@@ -6007,11 +5941,36 @@
 
   function openManualEditModal(rec) {
     const modal = document.getElementById('manualPunchModal');
-    document.getElementById('manualPunchId').value = rec.id;
-    document.getElementById('manualPunchEmpSelect').value = rec.employeeId;
-    document.getElementById('manualPunchDate').value = rec.date;
-    document.getElementById('manualPunchCheckIn').value = rec.checkIn ? rec.checkIn.substring(0, 5) : '';
-    document.getElementById('manualPunchCheckOut').value = rec.checkOut ? rec.checkOut.substring(0, 5) : '';
+    document.getElementById('manualPunchId').value = rec.id || '';
+
+    const empSelect = document.getElementById('manualPunchEmpSelect');
+    if (empSelect) {
+      const rawTargetId = rec.employeeId || rec.employee_id;
+      const targetEmp = (store.state.employees || []).find(e => 
+        e.id === rawTargetId || 
+        e.employee_code === rawTargetId || 
+        e.employeeCode === rawTargetId ||
+        (rec.employeeName && (e.fullName === rec.employeeName || `${e.first_name || ''} ${e.last_name || ''}`.trim() === rec.employeeName))
+      );
+      
+      const targetVal = targetEmp ? targetEmp.id : rawTargetId;
+      if (targetVal) {
+        let optExists = Array.from(empSelect.options).some(o => o.value === targetVal);
+        if (!optExists) {
+          const opt = document.createElement('option');
+          opt.value = targetVal;
+          opt.textContent = targetEmp ? `${targetEmp.fullName} (${getEmployeeCode(targetEmp)})` : (rec.employeeName || targetVal);
+          empSelect.appendChild(opt);
+        }
+        empSelect.value = targetVal;
+      }
+    }
+
+    document.getElementById('manualPunchDate').value = rec.date || '';
+    const formattedCheckIn = rec.checkIn ? (ApiService.formatToCairoTime(rec.checkIn) || rec.checkIn) : '';
+    const formattedCheckOut = rec.checkOut ? (ApiService.formatToCairoTime(rec.checkOut) || rec.checkOut) : '';
+    document.getElementById('manualPunchCheckIn').value = formattedCheckIn ? formattedCheckIn.substring(0, 5) : '';
+    document.getElementById('manualPunchCheckOut').value = formattedCheckOut ? formattedCheckOut.substring(0, 5) : '';
     document.getElementById('manualPunchLateMins').value = rec.lateMinutes || 0;
     document.getElementById('manualPunchEarlyMins').value = rec.earlyLeaveMinutes || 0;
     document.getElementById('manualPunchOtHours').value = rec.overtimeHours || 0;
@@ -6072,7 +6031,7 @@
       }
     });
 
-    openAddBtn?.addEventListener('click', () => {
+    openAddBtn?.addEventListener('click', async () => {
       form?.reset();
       updateEmpFormRoleOptions();
       document.getElementById('empFormId').value = '';
@@ -6082,7 +6041,28 @@
         submitBtn.innerHTML = '<i class="fa-solid fa-user-plus ml-1.5"></i><span>إضافة موظف جديد</span>';
         submitBtn.className = 'px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm md:text-base font-bold shadow-md shadow-blue-500/20 transition-all active:scale-95 flex items-center gap-1.5';
       }
-      document.getElementById('empFormPin').value = generateRandom6DigitPin();
+
+      // اقتراح كود الموظف التالي تلقائياً
+      const codeInput = document.getElementById('empFormCode');
+      if (codeInput) {
+        try {
+          const nextCode = await ApiService.getNextEmployeeId();
+          codeInput.value = nextCode;
+        } catch (e) {
+          codeInput.value = 'EMP-0001';
+        }
+      }
+
+      // في وضع الإضافة: حقل الـ PIN إلزامي مع توليد رمز عشوائي
+      const pinInput = document.getElementById('empFormPin');
+      const pinLabel = document.getElementById('empFormPinLabel');
+      if (pinLabel) pinLabel.textContent = 'رمز PIN (6 أرقام) *';
+      if (pinInput) {
+        pinInput.required = true;
+        pinInput.placeholder = '123456';
+        pinInput.value = generateRandom6DigitPin();
+      }
+
       if (genderSelect) genderSelect.value = 'male';
       if (document.getElementById('empFormRole')) document.getElementById('empFormRole').value = 'employee';
       if (document.getElementById('empFormEmail')) document.getElementById('empFormEmail').value = '';
@@ -6099,9 +6079,34 @@
       document.getElementById('empFormPin').value = generateRandom6DigitPin();
     });
 
+    // زر نسخ كود الموظف السريع
+    document.getElementById('copyEmpCodeBtn')?.addEventListener('click', () => {
+      sound.playClick();
+      const codeInput = document.getElementById('empFormCode');
+      const val = codeInput?.value?.trim();
+      if (!val) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(val).then(() => {
+          showToast(`تم نسخ كود الموظف (${val}) إلى الحافظة`, 'success', 2000);
+        }).catch(() => {
+          showToast(`كود الموظف: ${val}`, 'info', 2000);
+        });
+      } else {
+        showToast(`كود الموظف: ${val}`, 'info', 2000);
+      }
+    });
+
     form?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const empId = document.getElementById('empFormId').value;
+      const empCodeVal = document.getElementById('empFormCode')?.value?.trim();
+      const pinVal = document.getElementById('empFormPin')?.value?.trim();
+
+      if (!empCodeVal) {
+        showToast('يرجى إدخال كود الموظف', 'warning');
+        return;
+      }
+
       const fullNameVal = document.getElementById('empFormFullName').value;
       const genderVal = document.getElementById('empFormGender')?.value || detectGender(fullNameVal);
       let roleVal = document.getElementById('empFormRole')?.value || 'employee';
@@ -6112,6 +6117,8 @@
       }
 
       const empPayload = {
+        employee_code: empCodeVal,
+        employeeCode: empCodeVal,
         fullName: fullNameVal,
         gender: genderVal,
         avatar: genderVal === 'female' ? DEFAULT_AVATARS.female : DEFAULT_AVATARS.male,
@@ -6122,7 +6129,6 @@
         hireDate: document.getElementById('empFormHireDate').value,
         shiftStart: document.getElementById('empFormShiftStart').value,
         shiftEnd: document.getElementById('empFormShiftEnd').value,
-        pin: document.getElementById('empFormPin').value,
         baseSalary: Number(document.getElementById('empFormBaseSalary').value || 0),
         housingAllowance: Number(document.getElementById('empFormHousing').value || 0),
         transportAllowance: Number(document.getElementById('empFormTransport').value || 0),
@@ -6132,6 +6138,23 @@
         salesTarget: Number(document.getElementById('empFormSalesTarget')?.value || 0),
         commissionRate: Number(document.getElementById('empFormCommissionRate')?.value || 0)
       };
+
+      if (!empId) {
+        // في وضع الإضافة: حقل الـ PIN إلزامي
+        if (!pinVal || !/^\d{6}$/.test(pinVal)) {
+          showToast('يرجى إدخال رمز PIN صالح مكون من 6 أرقام', 'warning');
+          return;
+        }
+        empPayload.pin = pinVal;
+      } else {
+        // في وضع التعديل: لا يُرسل رمز الـ PIN إلا إذا أدخل المدير قيمة جديدة صالحة (6 أرقام)
+        if (pinVal && /^\d{6}$/.test(pinVal)) {
+          empPayload.pin = pinVal;
+        } else if (pinVal && !/^\d{6}$/.test(pinVal)) {
+          showToast('يجب أن يتكون رمز PIN الجديد من 6 أرقام، أو اتركه فارغاً للإبقاء على الرمز الحالي', 'warning');
+          return;
+        }
+      }
 
       let res;
       if (empId) {
@@ -6223,10 +6246,12 @@
       const childId = `emp-child-${emp.id || idx}`;
 
       let rolePill = '';
-      if (emp.role === 'admin') {
-        rolePill = '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300">مدير نظام</span>';
+      if (emp.role === 'admin' || emp.role === 'programmer') {
+        rolePill = '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300">مبرمج نظام</span>';
+      } else if (emp.role === 'manager') {
+        rolePill = '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">مدير</span>';
       } else if (emp.role === 'hr') {
-        rolePill = '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">HR</span>';
+        rolePill = '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">HR</span>';
       } else {
         rolePill = '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">موظف</span>';
       }
@@ -6239,7 +6264,7 @@
               <div class="min-w-0">
                 <div class="text-slate-900 dark:text-white font-bold text-xs sm:text-sm truncate max-w-[130px] sm:max-w-none">${escapeHTML(emp.fullName)}</div>
                 <div class="flex items-center gap-1.5 mt-0.5">
-                  <span class="text-[11px] text-blue-600 dark:text-blue-400 font-mono font-bold tabular-nums num-display">${escapeHTML(emp.id)}</span>
+                  <span class="text-[11px] text-blue-600 dark:text-blue-400 font-mono font-bold tabular-nums num-display">${escapeHTML(getEmployeeCode(emp))}</span>
                   ${rolePill}
                 </div>
               </div>
@@ -6284,7 +6309,7 @@
                 </div>
                 <div>
                   <span class="text-slate-500 dark:text-slate-400 block text-[11px] font-medium">الصلاحية:</span>
-                  <span class="font-bold text-blue-600 dark:text-blue-400">${emp.role === 'admin' ? 'مدير نظام (Super Admin)' : emp.role === 'hr' ? 'مسؤول موارد بشرية (HR)' : 'موظف (Employee)'}</span>
+                  <span class="font-bold text-blue-600 dark:text-blue-400">${emp.role === 'admin' || emp.role === 'programmer' ? 'مبرمج نظام (Super Admin)' : emp.role === 'manager' ? 'مدير (Manager)' : emp.role === 'hr' ? 'مسؤول موارد بشرية (HR)' : 'موظف (Employee)'}</span>
                 </div>
                 <div>
                   <span class="text-slate-500 dark:text-slate-400 block text-[11px] font-medium">الراتب الأساسي:</span>
@@ -6300,7 +6325,7 @@
                 </div>
                 <div>
                   <span class="text-slate-500 dark:text-slate-400 block text-[11px] font-medium">رمز PIN البصمة:</span>
-                  <span class="font-mono font-black text-blue-600 dark:text-blue-400">${escapeHTML(emp.pin)}</span>
+                  <span class="font-mono font-black text-blue-600 dark:text-blue-400">${emp.pin ? escapeHTML(emp.pin) : '•••••• (محمي)'}</span>
                 </div>
                 <div>
                   <span class="text-slate-500 dark:text-slate-400 block text-[11px] font-medium">البريد الإلكتروني:</span>
@@ -6342,6 +6367,23 @@
       submitBtn.className = 'px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm md:text-base font-bold shadow-md shadow-emerald-500/20 transition-all active:scale-95 flex items-center gap-1.5';
     }
     document.getElementById('empFormId').value = emp.id;
+
+    // 1. ملء كود الموظف
+    const codeInput = document.getElementById('empFormCode');
+    if (codeInput) {
+      codeInput.value = emp.employee_code || emp.employeeCode || getEmployeeCode(emp) || '';
+    }
+
+    // 2. ضبط حقل PIN: فارغ واختياري مع placeholder توضيحي (منع ظهور undefined)
+    const pinInput = document.getElementById('empFormPin');
+    const pinLabel = document.getElementById('empFormPinLabel');
+    if (pinLabel) pinLabel.textContent = 'رمز PIN (6 أرقام - اختياري)';
+    if (pinInput) {
+      pinInput.value = '';
+      pinInput.required = false;
+      pinInput.placeholder = 'اتركه فارغاً للإبقاء على الرمز الحالي';
+    }
+
     document.getElementById('empFormFullName').value = emp.fullName;
     if (document.getElementById('empFormGender')) {
       document.getElementById('empFormGender').value = emp.gender || detectGender(emp.fullName || '');
@@ -6353,7 +6395,6 @@
     document.getElementById('empFormHireDate').value = emp.hireDate || '2023-01-01';
     document.getElementById('empFormShiftStart').value = emp.shiftStart || '08:00';
     document.getElementById('empFormShiftEnd').value = emp.shiftEnd || '16:00';
-    document.getElementById('empFormPin').value = emp.pin;
     document.getElementById('empFormBaseSalary').value = emp.baseSalary;
     document.getElementById('empFormHousing').value = emp.housingAllowance || 0;
     document.getElementById('empFormTransport').value = emp.transportAllowance || 0;
@@ -6635,12 +6676,14 @@
 
       const isApproved = l.status === 'approved';
       const childId = `leave-child-${l.id || idx}`;
+      const lEmp = (store.state.employees || []).find(e => e.id === l.employeeId || e.id === l.employee_id || e.employee_code === l.employeeId);
+      const lEmpCode = (lEmp ? getEmployeeCode(lEmp) : null) || l.employeeCode || l.employee_code || l.employeeId;
 
       return `
         <tr class="table-parent-row bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/60 transition-colors cursor-pointer md:cursor-default" data-child-id="${childId}">
           <td class="p-2 sm:p-2.5 font-bold text-slate-900 dark:text-white">
             <div class="text-xs sm:text-sm font-bold truncate max-w-[130px] sm:max-w-none">${escapeHTML(l.employeeName)}</div>
-            <div class="text-[11px] text-slate-500 dark:text-slate-400 font-mono font-bold tabular-nums num-display">${escapeHTML(l.employeeId)}</div>
+            <div class="text-[11px] text-slate-500 dark:text-slate-400 font-mono font-bold tabular-nums num-display">${escapeHTML(lEmpCode)}</div>
           </td>
           <td class="p-2 sm:p-2.5 hidden md:table-cell">
             <div class="text-xs font-bold">${typeLabel}</div>
@@ -6982,7 +7025,7 @@
         <tr class="table-parent-row bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/60 transition-colors cursor-pointer md:cursor-default" data-child-id="${childId}">
           <td class="p-2 sm:p-2.5 font-bold text-slate-900 dark:text-white">
             <div class="text-slate-900 dark:text-white text-xs sm:text-sm font-bold truncate max-w-[130px] sm:max-w-none">${escapeHTML(p.employee.fullName)}</div>
-            <div class="text-[11px] text-slate-500 dark:text-slate-400 font-mono font-bold mt-0.5 tabular-nums num-display">${escapeHTML(p.employee.id)} • ${escapeHTML(p.employee.department)}</div>
+            <div class="text-[11px] text-slate-500 dark:text-slate-400 font-mono font-bold mt-0.5 tabular-nums num-display">${escapeHTML(getEmployeeCode(p.employee))} • ${escapeHTML(p.employee.department)}</div>
           </td>
           <td class="p-2 sm:p-2.5 font-mono font-bold text-blue-700 dark:text-blue-300 text-xs sm:text-sm tabular-nums num-display bg-blue-50/40 dark:bg-blue-950/20 hidden md:table-cell">
             ${formatCurrency(p.earnings.gross)}
@@ -7070,7 +7113,7 @@
 
     // Employee Metadata
     document.getElementById('slipEmpName').textContent = p.employee.fullName;
-    document.getElementById('slipEmpId').textContent = p.employee.id;
+    document.getElementById('slipEmpId').textContent = getEmployeeCode(p.employee);
     document.getElementById('slipEmpDept').textContent = p.employee.department;
     document.getElementById('slipEmpTitle').textContent = p.employee.jobTitle;
 
@@ -7727,7 +7770,9 @@
     sound.playClick();
     if (type === 'attendance') {
       const rec = data;
-      const title = `تفاصيل حركة الحضور - ${rec.employeeName} (${rec.employeeId})`;
+      const attEmp = (store.state.employees || []).find(e => e.id === rec.employeeId || e.id === rec.employee_id || e.employee_code === rec.employeeId);
+      const attEmpCode = (attEmp ? getEmployeeCode(attEmp) : null) || rec.employeeCode || rec.employee_code || rec.employeeId;
+      const title = `تفاصيل حركة الحضور - ${rec.employeeName} (${attEmpCode})`;
       const html = `
         <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 space-y-2">
           <div class="flex justify-between items-center py-1 border-b border-slate-200 dark:border-slate-700">
@@ -7776,14 +7821,14 @@
     } else if (type === 'employee') {
       const emp = data;
       const allowancesTotal = (emp.housingAllowance || 0) + (emp.transportAllowance || 0) + (emp.otherAllowances || 0);
-      const title = `ملف الموظف - ${emp.fullName} (${emp.id})`;
+      const title = `ملف الموظف - ${emp.fullName} (${getEmployeeCode(emp)})`;
       const html = `
         <div class="flex items-center gap-3 p-3 rounded-xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 mb-3">
           <img src="${escapeHTML(getEmployeeAvatar(emp))}" alt="${escapeHTML(emp.fullName)}" class="w-12 h-12 rounded-full object-cover border-2 border-blue-500 shadow">
           <div>
             <h4 class="font-bold text-slate-900 dark:text-white text-sm">${escapeHTML(emp.fullName)}</h4>
             <p class="text-xs text-slate-600 dark:text-slate-400 font-medium">${escapeHTML(emp.jobTitle)} • ${escapeHTML(emp.department)}</p>
-            <span class="text-xs font-mono font-bold text-blue-600 dark:text-blue-400 mt-0.5 inline-block">${escapeHTML(emp.id)}</span>
+            <span class="text-xs font-mono font-bold text-blue-600 dark:text-blue-400 mt-0.5 inline-block">${escapeHTML(getEmployeeCode(emp))}</span>
           </div>
         </div>
         <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 space-y-2">
@@ -7793,7 +7838,7 @@
           </div>
           <div class="flex justify-between items-center py-1 border-b border-slate-200 dark:border-slate-700">
             <span class="text-slate-600 dark:text-slate-400 font-semibold">رمز PIN (كشك البصمة):</span>
-            <span class="font-mono font-black text-blue-600 dark:text-blue-400 tracking-wider">${escapeHTML(emp.pin)}</span>
+            <span class="font-mono font-black text-blue-600 dark:text-blue-400 tracking-wider">${emp.pin ? escapeHTML(emp.pin) : '•••••• (محفوظ ومحمي)'}</span>
           </div>
           <div class="flex justify-between items-center py-1 border-b border-slate-200 dark:border-slate-700">
             <span class="text-slate-600 dark:text-slate-400 font-semibold">الراتب الأساسي:</span>
@@ -8035,8 +8080,8 @@
         if (db && Array.isArray(db.companies)) {
           let touched = false;
           db.companies.forEach(c => {
-            if (!c.manager_name || c.manager_name.includes('?') || c.manager_name.includes('')) {
-              c.manager_name = (c.pin === '050298' || c.email === 'aemade2016@gmail.com' || c.id === '11111111-2222-3333-4444-555555555555') ? 'م. أحمد عماد' : 'المدير العام';
+            if (!c.manager_name || c.manager_name.includes('?') || c.manager_name.includes('') || /\uFFFD/.test(c.manager_name)) {
+              c.manager_name = 'المدير العام';
               c.managerName = c.manager_name;
               touched = true;
             }
@@ -8058,24 +8103,15 @@
     // 2. Theme, Sound & Fullscreen
     initThemeAndSound();
 
-    // 3. Load Initial Data from ApiService
-    await loadSettings();
-    await loadDepartments();
-    await loadEmployees();
-    await loadAttendanceLogs();
-    await loadLeaves();
-    await loadPermissions();
-    await loadAdjustments();
-
-    // 4. Setup Navigation & Mobile Off-Canvas Drawer (including Programmer Panel dynamic injection)
+    // 3. Setup Navigation & Mobile Off-Canvas Drawer (including Programmer Panel dynamic injection)
     ensureProgrammerNavExists();
     setupNavigation();
     setupMobileDrawer();
 
-    // 5. Setup Kiosk Terminal (Scanner + PIN)
+    // 4. Setup Kiosk Terminal (Scanner + PIN)
     setupKioskTerminal();
 
-    // 6. Setup Feature Modules (Admin Portal)
+    // 5. Setup Feature Modules (Admin Portal)
     setupDashboard();
     setupEmployeesManagement();
     setupAttendanceView();
@@ -8083,31 +8119,33 @@
     setupPayrollEngine();
     setupSettingsForm();
 
-    // 7. Setup Creative Auth Portal & Onboarding Wizard
+    // 6. Setup Creative Auth Portal & Onboarding Wizard
     setupAuthPortal();
     setupOnboardingWizard();
 
-    // 8. Setup Employee Self-Service Portal
+    // 7. Setup Employee Self-Service Portal
     setupEmployeePortal();
     setupEmployeeRequestsUI();
     setupRequestDetailsModal();
 
-    // 9. Setup Pending Approvals Module
+    // 8. Setup Pending Approvals Module
     setupApprovalsModule();
-    updateAdminNotifications();
-    loadAndRenderAdminRequests();
 
-    // 10. Setup Quick Details Modal
+    // 9. Setup Quick Details Modal
     setupQuickDetailsModal();
 
-    // 10.5 Setup Responsive Zero-Scroll Table Drawers (Mobile Hidden Data Expand)
+    // 10. Setup Responsive Zero-Scroll Table Drawers (Mobile Hidden Data Expand)
     setupResponsiveTableToggle();
 
     // 11. Setup Accessibility & Keyboard Navigation
     setupGlobalKeyboardNavigation();
 
     // 12. Authenticate & Select Initial Portal (Session Check)
-    await checkInitialSession();
+    // منع جلب البيانات قبل تسجيل الدخول: يتم التحقق أولاً من وجود جلسة مصادقة نشطة
+    const hasActiveSession = await checkInitialSession();
+    if (!hasActiveSession) {
+      switchPortal('auth');
+    }
 
     console.log('✅ AE (HR-SYSTEM) RBAC HR & Payroll System successfully initialized with ES2024+ reactive architecture.');
   }

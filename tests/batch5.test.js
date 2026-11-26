@@ -133,6 +133,22 @@ describe('AE HR-SYSTEM Batch 5 Supabase Write Error Handling & Sync Tests', () =
       window.ApiService.simulateDelay = () => Promise.resolve();
     }
 
+    const db = window.LocalDatabase.getDB();
+    if (!Array.isArray(db.employees) || db.employees.length === 0) {
+      db.employees = [{
+        id: 'aa69f711-7ca3-41dc-b628-42a5dda853f6',
+        user_id: 'aa69f711-7ca3-41dc-b628-42a5dda853f6',
+        employee_code: 'EMP-0001',
+        fullName: 'مدير النظام (مبرمج)',
+        department: 'تقنية المعلومات',
+        jobTitle: 'مبرمج نظام',
+        role: 'programmer',
+        status: 'active',
+        company_id: '11111111-2222-3333-4444-555555555555'
+      }];
+      window.LocalDatabase.saveDB(db);
+    }
+
     return { window, dom, mockSupabase, failingWriteTables, toasts };
   }
 

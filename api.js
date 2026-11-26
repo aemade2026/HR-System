@@ -15,6 +15,9 @@
   const SUPABASE_URL = "https://kvcvjmbxfjpqwypcauaw.supabase.co";
   const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt2Y3ZqbWJ4ZmpwcXd5cGNhdWF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI4Njc1OTQsImV4cCI6MjEwODQ0MzU5NH0.QURVE7XgPsURbgz7yv_bflH3C6ESiClo2WiLzGZoC8Y";
 
+  const EMPLOYEE_PUBLIC_COLS = 'id, company_id, user_id, employee_code, first_name, last_name, email, phone, department, job_title, role, salary, hire_date, status, shift_start, shift_end, housing_allowance, transport_allowance, other_allowances, insurance_percent, leave_balance, sales_target, sales_achieved, commission_rate, salary_status, created_at, updated_at';
+  const COMPANY_PUBLIC_COLS = 'id, name, tax_number, subscription_plan, is_active, company_lat, company_lng, allowed_radius_meters, status, manager_name, manager_phone, manager_email, created_at, updated_at';
+
   // تهيئة عميل Supabase باستخدام let داخل النطاق المغلق لتفادي خطأ Redeclaration
   let supabase = null;
   if (typeof window !== 'undefined' && window.supabase && typeof window.supabase.createClient === 'function') {
@@ -98,8 +101,8 @@ const INITIAL_DATABASE = {
     currency: 'ج.م',
     currencyCode: 'EGP',
     address: 'القاهرة، مصر',
-    phone: '01008074308',
-    email: 'aemade2016@gmail.com',
+    phone: '01000000000',
+    email: 'info@system.local',
     taxNumber: '492-710-853',
     commercialRegister: '184920 - مكتب استثمار القاهرة',
     laborLawReference: 'قانون العمل المصري الموحد رقم 12 لسنة 2003 وتعديلاته ولائحته التنفيذية'
@@ -116,11 +119,10 @@ const INITIAL_DATABASE = {
       companyName: 'AE (HR-SYSTEM)',
       tax_number: '492-710-853',
       taxNumber: '492-710-853',
-      manager_name: 'م. أحمد عماد',
-      managerName: 'م. أحمد عماد',
-      phone: '01008074308',
-      email: 'aemade2016@gmail.com',
-      pin: '050298',
+      manager_name: 'المدير العام',
+      managerName: 'المدير العام',
+      phone: '01000000000',
+      email: 'info@system.local',
       status: 'active',
       created_at: '2022-01-01T08:00:00Z',
       createdAt: '2022-01-01'
@@ -552,40 +554,9 @@ const INITIAL_DATABASE = {
   syncQueue: [],
 
   /* --------------------------------------------------------------------------
-     سجلات الموظفين الأصلية (Employees) - الحساب المعتمد للمبرمج الرئيسي فقط
+     سجلات الموظفين الأصلية (Employees)
      -------------------------------------------------------------------------- */
-  employees: [
-    {
-      id: 'aa69f711-7ca3-41dc-b628-42a5dda853f6',
-      employee_code: 'EMP-0001',
-      fullName: 'م. أحمد عماد',
-      first_name: 'Ahmed',
-      last_name: 'Emad',
-      gender: 'male',
-      avatar: DEFAULT_AVATARS.male,
-      department: 'تقنية المعلومات',
-      jobTitle: 'مبرمج ومطور برمجيات (Super Admin)',
-      hireDate: '2022-01-01',
-      shiftStart: '08:00',
-      shiftEnd: '16:00',
-      pin: '050298',
-      baseSalary: 25000,
-      housingAllowance: 0,
-      transportAllowance: 0,
-      otherAllowances: 0,
-      insurancePercent: 11,
-      phone: '01008074308',
-      email: 'aemade2016@gmail.com',
-      role: 'programmer', // Super Admin / Programmer
-      status: 'active',
-      salesTarget: 0,
-      salesAchieved: 0,
-      commissionRate: 0,
-      salaryStatus: 'paid',
-      leaveBalance: 21,
-      company_id: '11111111-2222-3333-4444-555555555555'
-    }
-  ],
+  employees: [],
   attendance: [],
   leaves: [],
   permissions: [],
@@ -649,22 +620,19 @@ class AuditMiddleware {
         const session = JSON.parse(raw);
         if (session && session.employeeId) {
           const db = customDb || LocalDatabase.getDB();
-          let emp = db?.employees?.find(e => e.id === session.employeeId || e.employee_code === session.employeeId);
-          if (!emp && (session.employeeId === 'EMP-0001' || session.email === 'aemade2016@gmail.com')) {
-            emp = db?.employees?.find(e => e.email === 'aemade2016@gmail.com');
-          }
+          let emp = db?.employees?.find(e => e.id === session.employeeId || e.employee_code === session.employeeId || (session.email && e.email === session.email));
           if (emp) {
             return {
               id: emp.id,
               name: emp.fullName,
-              role: emp.role || 'programmer',
+              role: emp.role || 'employee',
               roleArabic: ApiService.getRoleArabicTitle(emp.role)
             };
           }
           return {
             id: session.employeeId,
-            name: session.name || (session.role === 'programmer' ? 'م. أحمد عماد' : 'موظف'),
-            role: session.role || 'programmer',
+            name: session.name || 'مستخدم',
+            role: session.role || 'employee',
             roleArabic: ApiService.getRoleArabicTitle(session.role)
           };
         }
@@ -672,12 +640,23 @@ class AuditMiddleware {
     } catch (e) {
       // ignore
     }
+    const db = customDb || LocalDatabase.getDB();
+    const firstEmp = db?.employees?.[0];
+    if (firstEmp) {
+      return {
+        id: firstEmp.id,
+        employee_code: firstEmp.employee_code || firstEmp.id,
+        name: firstEmp.fullName,
+        role: firstEmp.role || 'employee',
+        roleArabic: ApiService.getRoleArabicTitle(firstEmp.role)
+      };
+    }
     return {
-      id: 'aa69f711-7ca3-41dc-b628-42a5dda853f6',
-      employee_code: 'EMP-0001',
-      name: 'م. أحمد عماد',
-      role: 'programmer',
-      roleArabic: 'مدير نظام / مبرمج'
+      id: 'SYS-ADMIN',
+      employee_code: 'SYS-ADMIN',
+      name: 'مدير النظام',
+      role: 'admin',
+      roleArabic: 'مدير نظام'
     };
   }
 
@@ -740,6 +719,33 @@ class AuditMiddleware {
       }
 
       LocalDatabase.saveDB(db);
+
+      // مزامنة فورية غير معطلة مع جدول audit_logs في Supabase
+      if (typeof supabase !== 'undefined' && supabase && typeof supabase.from === 'function') {
+        try {
+          const compId = payload?.company_id || (typeof ApiService !== 'undefined' && typeof ApiService.getCurrentCompanyId === 'function' ? ApiService.getCurrentCompanyId() : null);
+          const sbEntry = {
+            company_id: compId,
+            action: logEntry.action,
+            target: logEntry.target,
+            target_id: logEntry.targetId,
+            details: logEntry.details,
+            performed_by: actor.name || actor.id || 'SYSTEM'
+          };
+          const fromQ = supabase.from('audit_logs');
+          if (fromQ && typeof fromQ.insert === 'function') {
+            const insRes = fromQ.insert([sbEntry]);
+            if (insRes && typeof insRes.then === 'function') {
+              insRes.then(() => {}).catch(e => {
+                console.warn('[Supabase AuditLog Insert Warning]:', e?.message || e);
+              });
+            }
+          }
+        } catch (e) {
+          console.warn('[Supabase AuditLog Sync Warning]:', e);
+        }
+      }
+
       return logEntry;
     } catch (err) {
       console.warn('Audit logging failed (non-critical):', err);
@@ -870,74 +876,12 @@ class LocalDatabase {
             }
           }
 
-          // استعادة وضمان حماية حساب المبرمج الأصلي (aemade2016@gmail.com) كـ Super Admin دون مساس
-          if (!Array.isArray(parsed.employees)) parsed.employees = [];
-
-          let prog = parsed.employees.find(e => e.email === 'aemade2016@gmail.com' || e.id === 'aa69f711-7ca3-41dc-b628-42a5dda853f6');
-          if (prog) {
-            prog.id = 'aa69f711-7ca3-41dc-b628-42a5dda853f6';
-            prog.employee_code = 'EMP-0001';
-            prog.fullName = 'م. أحمد عماد';
-            prog.first_name = 'Ahmed';
-            prog.last_name = 'Emad';
-            prog.email = 'aemade2016@gmail.com';
-            prog.role = 'programmer';
-            prog.gender = 'male';
-            prog.avatar = DEFAULT_AVATARS.male;
-            prog.department = 'تقنية المعلومات';
-            prog.jobTitle = 'مبرمج ومطور برمجيات (Super Admin)';
-            prog.status = 'active';
-            if (!prog.pin) prog.pin = '050298';
-            prog.baseSalary = 25000;
-            needsSave = true;
-          } else {
-            parsed.employees.unshift(cloneData(INITIAL_DATABASE.employees[0]));
+          if (!Array.isArray(parsed.employees) || parsed.employees.length === 0) {
+            parsed.employees = cloneData(INITIAL_DATABASE.employees);
             needsSave = true;
           }
 
-          // التأكد من استقلالية حساب الموظف المعتمد "احمد عماد الدين" (EMP-1001) كموظف منفصل تماماً
-          let cand = parsed.employees.find(e => e.email !== 'aemade2016@gmail.com' && (e.id === 'EMP-1001' || e.employee_code === 'EMP-1001' || e.fullName === 'احمد عماد الدين'));
-          if (!cand) {
-            parsed.employees.push({
-              id: 'EMP-1001',
-              employee_code: 'EMP-1001',
-              company_id: '55555555-4444-3333-2222-111111111111',
-              fullName: 'احمد عماد الدين',
-              gender: 'male',
-              avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
-              department: 'المبيعات والتسويق',
-              jobTitle: 'أخصائي المبيعات والتسويق',
-              phone: '01123245614',
-              email: 'ahmed.emad.sales@company.com',
-              role: 'employee',
-              status: 'active',
-              pin: '123456',
-              baseSalary: 7500,
-              housingAllowance: 1000,
-              transportAllowance: 800,
-              otherAllowances: 500,
-              salesTarget: 15000,
-              salesAchieved: 0,
-              commissionRate: 3,
-              salaryStatus: 'processing',
-              leaveBalance: 21,
-              hireDate: new Date().toISOString().split('T')[0]
-            });
-            needsSave = true;
-          } else {
-            // تثبيت بيانات الموظف المعتمد
-            cand.id = 'EMP-1001';
-            cand.employee_code = 'EMP-1001';
-            cand.role = 'employee';
-            cand.gender = 'male';
-            if (!cand.avatar || cand.avatar.includes('photo-1534528741775-53994a69daeb')) {
-              cand.avatar = 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80';
-            }
-            cand.status = 'active';
-            cand.department = 'المبيعات والتسويق';
-            cand.jobTitle = cand.jobTitle || 'أخصائي المبيعات والتسويق';
-            cand.baseSalary = cand.baseSalary || 7500;
-          }
+          // تم إزالة زراعة الموظف الوهمي لحماية خصوصية البيانات
 
           // تسوية ومزامنة الصور الشخصية بناءً على جنس الموظف (ذكر / أنثى) لجميع الموظفين
           if (Array.isArray(parsed.employees)) {
@@ -1382,37 +1326,38 @@ class ApiService {
       (`${emp.first_name || ''} ${emp.last_name || ''}`.trim()) ||
       emp.name ||
       emp.id;
-    const isProg = emp.email === 'aemade2016@gmail.com' || emp.id === 'aa69f711-7ca3-41dc-b628-42a5dda853f6' || emp.employee_code === 'EMP-0001';
-    const empCode = isProg ? 'EMP-0001' : (emp.employee_code || emp.employeeCode || (String(emp.id || '').startsWith('EMP-') ? emp.id : 'EMP-1001'));
+    const empCode = emp.employee_code || emp.employeeCode || (String(emp.id || '').startsWith('EMP-') ? emp.id : 'EMP-0001');
+    const role = emp.role || 'employee';
     return {
-      id: isProg ? 'aa69f711-7ca3-41dc-b628-42a5dda853f6' : (emp.id || emp.employee_code),
+      id: emp.id || emp.employee_code,
+      user_id: emp.user_id || emp.userId || null,
+      userId: emp.user_id || emp.userId || null,
       employee_code: empCode,
-      fullName: isProg ? 'م. أحمد عماد' : fullName,
-      first_name: isProg ? 'Ahmed' : (emp.first_name || fullName.split(' ')[0] || ''),
-      last_name: isProg ? 'Emad' : (emp.last_name || fullName.split(' ').slice(1).join(' ') || ''),
-      gender: emp.gender || detectGender(isProg ? 'م. أحمد عماد' : fullName),
+      fullName: fullName,
+      first_name: emp.first_name || fullName.split(' ')[0] || '',
+      last_name: emp.last_name || fullName.split(' ').slice(1).join(' ') || '',
+      gender: emp.gender || detectGender(fullName),
       avatar: (() => {
-        const g = emp.gender || detectGender(isProg ? 'م. أحمد عماد' : fullName);
+        const g = emp.gender || detectGender(fullName);
         if (emp.avatar && !(g === 'male' && emp.avatar.includes('photo-1534528741775-53994a69daeb'))) {
           return emp.avatar;
         }
         return g === 'female' ? DEFAULT_AVATARS.female : DEFAULT_AVATARS.male;
       })(),
-      department: isProg ? 'تقنية المعلومات' : (emp.department || 'العمليات والتشغيل'),
-      jobTitle: isProg ? 'مبرمج ومطور برمجيات (Super Admin)' : (emp.jobTitle || emp.job_title || 'موظف'),
+      department: emp.department || 'العمليات والتشغيل',
+      jobTitle: emp.jobTitle || emp.job_title || 'موظف',
       hireDate: emp.hireDate || emp.hire_date || new Date().toISOString().split('T')[0],
       shiftStart: emp.shiftStart || emp.shift_start || '08:00',
       shiftEnd: emp.shiftEnd || emp.shift_end || '16:00',
-      pin: isProg ? '050298' : String(emp.pin || '').trim(),
-      baseSalary: isProg ? 25000 : Number(emp.baseSalary ?? emp.salary ?? 7000),
+      baseSalary: Number(emp.baseSalary ?? emp.salary ?? 7000),
       housingAllowance: Number(emp.housingAllowance ?? 1000),
       transportAllowance: Number(emp.transportAllowance ?? 800),
       otherAllowances: Number(emp.otherAllowances ?? 500),
       insurancePercent: Number(emp.insurancePercent ?? 11),
-      phone: emp.phone || (isProg ? '01008074308' : ''),
-      email: emp.email || (isProg ? 'aemade2016@gmail.com' : ''),
-      role: isProg ? 'programmer' : (emp.role || 'employee'),
-      status: isProg ? 'active' : (emp.status || 'active'),
+      phone: emp.phone || '',
+      email: emp.email || '',
+      role: role,
+      status: emp.status || 'active',
       salesTarget: Number(emp.salesTarget ?? 0),
       salesAchieved: Number(emp.salesAchieved ?? 0),
       commissionRate: Number(emp.commissionRate ?? 0),
@@ -1431,9 +1376,11 @@ class ApiService {
     const firstName = empData.firstName || empData.first_name || parts[0] || 'موظف';
     const lastName = empData.lastName || empData.last_name || parts.slice(1).join(' ') || '';
     const isUUID = empData.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(empData.id);
+    const code = empData.employee_code || empData.employeeCode || (isUUID ? null : empData.id);
+    const hasPin = empData.pin && String(empData.pin).trim() !== '' && String(empData.pin).trim() !== 'undefined';
     const payload = {
       company_id: companyId,
-      employee_code: empData.employee_code || empData.id,
+      employee_code: code || empData.id,
       first_name: firstName,
       last_name: lastName,
       email: empData.email || null,
@@ -1443,11 +1390,14 @@ class ApiService {
       salary: Number(empData.baseSalary ?? empData.salary ?? 7000),
       role: empData.role || 'employee',
       status: empData.status || 'active',
-      pin: empData.pin ? String(empData.pin).trim() : null,
+      pin: hasPin ? String(empData.pin).trim() : null,
       hire_date: empData.hireDate || empData.hire_date || new Date().toISOString().split('T')[0]
     };
     if (isUUID) {
       payload.id = empData.id;
+    }
+    if (empData.user_id || empData.userId) {
+      payload.user_id = empData.user_id || empData.userId;
     }
     return payload;
   }
@@ -1491,6 +1441,58 @@ class ApiService {
   }
 
   /**
+   * استخراج فارق التوقيت لمدينة القاهرة (+02:00 أو +03:00) لتاريخ محدد
+   */
+  static getCairoOffset(dateObj = new Date()) {
+    try {
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Africa/Cairo',
+        timeZoneName: 'longOffset'
+      }).formatToParts(dateObj);
+      const tzPart = parts.find(p => p.type === 'timeZoneName');
+      if (tzPart && tzPart.value) {
+        const match = tzPart.value.match(/GMT([+-]\d{2}:\d{2})/);
+        if (match) return match[1];
+      }
+    } catch (e) {}
+    return '+02:00';
+  }
+
+  /**
+   * تحويل التاريخ المحلي (YYYY-MM-DD) والوقت (HH:mm) إلى توقيت ISO UTC المتوافق مع عمود TIMESTAMPTZ في Supabase
+   * يضمن حفظ 08:00 بتوقيت القاهرة كـ 06:00Z دون ترحيل الساعات عند استرجاعها
+   */
+  static formatLocalTimeToIsoUtc(dateStr, timeStr) {
+    if (!timeStr) return null;
+    const cleanTime = String(timeStr).trim();
+    if (!cleanTime) return null;
+    if (cleanTime.includes('T') && (cleanTime.endsWith('Z') || /[+-]\d{2}(:?\d{2})?$/.test(cleanTime))) {
+      return cleanTime;
+    }
+    const dStr = dateStr || ApiService.getCairoDateString(new Date());
+    const [y, m, d] = dStr.split('-').map(Number);
+    const timePart = cleanTime.includes('T') ? cleanTime.split('T')[1] : cleanTime;
+    const parts = timePart.split(':').map(Number);
+    const hh = parts[0] || 0;
+    const mm = parts[1] || 0;
+    const ss = parts[2] || 0;
+
+    const pad = (n) => String(n).padStart(2, '0');
+    try {
+      const approxDate = new Date(Date.UTC(y, m - 1, d, hh, mm, ss));
+      const offset = ApiService.getCairoOffset(approxDate);
+      const isoWithOffset = `${dStr}T${pad(hh)}:${pad(mm)}:${pad(ss)}${offset}`;
+      const dt = new Date(isoWithOffset);
+      if (!isNaN(dt.getTime())) {
+        return dt.toISOString();
+      }
+    } catch (e) {}
+
+    const localDate = new Date(y, m - 1, d, hh, mm, ss, 0);
+    return isNaN(localDate.getTime()) ? null : localDate.toISOString();
+  }
+
+  /**
    * تحويل طابع زمني أو وقت إلى توقيت القاهرة (HH:mm:ss)
    */
   static formatToCairoTime(val) {
@@ -1530,6 +1532,7 @@ class ApiService {
   static #normalizeAttendance(att, empMap = {}) {
     if (!att) return null;
     const emp = empMap[att.employee_id || att.employeeId] || {};
+    const empCode = emp.employee_code || emp.employeeCode || att.employee_code || att.employeeCode || '';
 
     const rawIn = att.check_in || att.checkIn;
     const rawOut = att.check_out || att.checkOut;
@@ -1556,6 +1559,8 @@ class ApiService {
     return {
       id: att.id,
       employeeId: att.employee_id || att.employeeId,
+      employeeCode: empCode,
+      employee_code: empCode,
       employeeName: att.employeeName || emp.fullName || att.employee_id,
       department: att.department || emp.department || '',
       date: att.date,
@@ -1663,60 +1668,66 @@ class ApiService {
 
   static async getCurrentSession() {
     try {
-      let raw = null;
-      if (typeof sessionStorage !== 'undefined') raw = sessionStorage.getItem('JISR_AUTH_SESSION');
-      if (!raw && typeof localStorage !== 'undefined') raw = localStorage.getItem('JISR_AUTH_SESSION');
-      if (!raw) return this.#createEnvelope(false, null, 'لا توجد جلسة نشطة');
-
-      const session = JSON.parse(raw);
-      const companyId = session.company_id || this.getCurrentCompanyId();
-      this.setCurrentCompanyId(companyId);
-
       let emp = null;
+      let targetCompanyId = null;
+      let sessionUser = null;
 
-      // 1. استدعاء Supabase أولاً
-      if (supabase) {
+      // 1. استدعاء supabase.auth.getSession() أولاً
+      if (supabase && supabase.auth && typeof supabase.auth.getSession === 'function') {
         try {
-          const { data, error } = await supabase
-            .from('employees')
-            .select('*')
-            .eq('company_id', companyId)
-            .or(`id.eq.${session.employeeId},employee_code.eq.${session.employeeId}`)
-            .maybeSingle();
-          if (data && !error) {
-            emp = this.#normalizeEmployee(data);
+          const { data: sessionData, error: sessionErr } = await supabase.auth.getSession();
+          if (!sessionErr && sessionData?.session?.user) {
+            sessionUser = sessionData.session.user;
+            const { data: empData, error: empErr } = await supabase
+              .from('employees')
+              .select(EMPLOYEE_PUBLIC_COLS)
+              .eq('user_id', sessionUser.id)
+              .maybeSingle();
+
+            if (!empErr && empData && empData.status === 'active') {
+              emp = this.#normalizeEmployee(empData);
+              targetCompanyId = empData.company_id;
+              if (targetCompanyId) this.setCurrentCompanyId(targetCompanyId);
+            }
           }
-        } catch (sbErr) {
-          console.warn('[Supabase Session Check Fallback]:', sbErr);
+        } catch (authErr) {
+          console.warn('[Supabase getSession Warning]:', authErr);
         }
       }
 
-      // 2. آلية Fallback على LocalDatabase
-      if (!emp) {
-        const db = LocalDatabase.getDB();
-        const localEmp = (db.employees || []).find(e =>
-          e.id === session.employeeId ||
-          e.employee_code === session.employeeId
-        );
-        if (localEmp) {
-          emp = cloneData(localEmp);
-        } else if (session.email === 'aemade2016@gmail.com' || session.employeeId === 'EMP-0001' || session.employeeId === 'aa69f711-7ca3-41dc-b628-42a5dda853f6') {
-          const prog = (db.employees || []).find(e => e.email === 'aemade2016@gmail.com');
-          if (prog) emp = cloneData(prog);
+      // 2. Fallback على التخزين المحلي (فقط عند تشغيل الاختبارات أو في بيئة بدون عميل Supabase)
+      const isTestEnv = Boolean(typeof globalThis !== 'undefined' && globalThis.process?.env && (globalThis.process.env.NODE_ENV === 'test' || globalThis.process.env.NODE_TEST_CONTEXT)) ||
+                        Boolean(typeof navigator !== 'undefined' && navigator.userAgent && navigator.userAgent.includes('jsdom'));
+      let session = null;
+      if (!emp && (isTestEnv || !supabase || !supabase.auth)) {
+        let raw = null;
+        if (typeof sessionStorage !== 'undefined') raw = sessionStorage.getItem('JISR_AUTH_SESSION');
+        if (!raw && typeof localStorage !== 'undefined') raw = localStorage.getItem('JISR_AUTH_SESSION');
+        if (raw) {
+          try {
+            session = JSON.parse(raw);
+            const companyId = session.company_id || this.getCurrentCompanyId();
+            this.setCurrentCompanyId(companyId);
+
+            const db = LocalDatabase.getDB();
+            const localEmp = (db.employees || []).find(e =>
+              (session.user_id && e.user_id === session.user_id) ||
+              e.id === session.employeeId ||
+              e.employee_code === session.employeeId ||
+              (session.email && e.email === session.email)
+            );
+            if (localEmp && localEmp.status === 'active') {
+              emp = cloneData(localEmp);
+              targetCompanyId = localEmp.company_id || companyId;
+            }
+          } catch (e) {}
         }
       }
 
       if (!emp) {
         if (typeof localStorage !== 'undefined') localStorage.removeItem('JISR_AUTH_SESSION');
         if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem('JISR_AUTH_SESSION');
-        return this.#createEnvelope(false, null, 'المستخدم المرتبط بهذه الجلسة غير موجود');
-      }
-
-      // حماية مطلقة: حساب المبرمج دائماً programmer
-      if (emp.email === 'aemade2016@gmail.com' || emp.id === 'aa69f711-7ca3-41dc-b628-42a5dda853f6') {
-        emp.role = 'programmer';
-        emp.department = 'تقنية المعلومات';
-        emp.jobTitle = 'مبرمج ومطور برمجيات (Super Admin)';
+        return this.#createEnvelope(false, null, 'لا توجد جلسة نشطة');
       }
 
       const db = LocalDatabase.getDB();
@@ -1730,23 +1741,219 @@ class ApiService {
         normalizedRole: normalizedRole,
         roleArabic: roleArabic,
         permissions: cloneData(rolePermissions),
-        session: session,
+        session: session || {
+          employeeId: emp.id,
+          user_id: emp.user_id || sessionUser?.id || null,
+          email: emp.email,
+          role: userRole
+        },
         user: cloneData(emp),
         employee: cloneData(emp),
-        companyId: companyId
+        companyId: targetCompanyId || this.getCurrentCompanyId()
       };
 
       return this.#createEnvelope(true, responsePayload, null, {
         ...responsePayload
       });
     } catch (err) {
-      return this.#handleError(err, 'فشل في التحقق من الجلسة');
+      return this.#handleError(err, 'فشل في استرجاع الجلسة الحالية');
     }
   }
 
   /**
-   * دالة تسجيل الدخول الموحدة للنظام المصري (RBAC Login)
-   * تقبل بصمة الإصبع أو رمز الـ PIN وتجلب company_id من Supabase وتحفظه بالجلسة
+   * تسجيل الدخول الرسمي عبر Supabase Auth باستخدام كود الموظف أو البريد الإلكتروني وكلمة المرور
+   * @param {string} identifier - كود الموظف (مثل EMP-0001) أو البريد الإلكتروني
+   * @param {string} password - كلمة المرور
+   * @param {boolean} [rememberMe=true]
+   */
+  static async loginWithEmailPassword(identifier, password, rememberMe = true) {
+    try {
+      await this.simulateDelay(100);
+      const cleanIdentifier = String(identifier || '').trim();
+      const cleanPass = String(password || '');
+
+      if (!cleanIdentifier || !cleanPass) {
+        return this.#createEnvelope(false, null, 'يرجى إدخال كود الموظف أو البريد الإلكتروني وكلمة المرور');
+      }
+
+      let emailToAuth = null;
+
+      // 1. إذا لم يحتوِ identifier على '@'، استدعِ دالة resolve_login_email في Supabase
+      if (cleanIdentifier.includes('@')) {
+        emailToAuth = cleanIdentifier.toLowerCase();
+      } else {
+        if (supabase) {
+          try {
+            const companyId = this.getCurrentCompanyId();
+            const rpcParams = { p_identifier: cleanIdentifier };
+            if (companyId) {
+              rpcParams.p_company_id = companyId;
+            }
+            const { data: rpcRes, error: rpcErr } = await supabase.rpc('resolve_login_email', rpcParams);
+
+            if (rpcErr) {
+              console.warn('[Supabase resolve_login_email Error]:', rpcErr);
+              return this.#createEnvelope(false, null, 'كود الموظف أو كلمة المرور غير صحيحة');
+            }
+
+            if (rpcRes) {
+              if (rpcRes.status === 'ambiguous') {
+                return this.#createEnvelope(false, null, 'هذا الكود مستخدم في أكثر من شركة، يرجى تسجيل الدخول بالبريد الإلكتروني');
+              }
+              if (rpcRes.status === 'not_found' || !rpcRes.email) {
+                return this.#createEnvelope(false, null, 'كود الموظف أو كلمة المرور غير صحيحة');
+              }
+              if (rpcRes.status === 'ok' && rpcRes.email) {
+                emailToAuth = String(rpcRes.email).trim().toLowerCase();
+              }
+            } else {
+              return this.#createEnvelope(false, null, 'كود الموظف أو كلمة المرور غير صحيحة');
+            }
+          } catch (rpcEx) {
+            console.warn('[resolve_login_email Exception]:', rpcEx);
+            return this.#createEnvelope(false, null, 'كود الموظف أو كلمة المرور غير صحيحة');
+          }
+        } else {
+          // Fallback للبيئة المحلية والاختبارات
+          const db = LocalDatabase.getDB();
+          const localEmp = (db.employees || []).find(e =>
+            e.employee_code === cleanIdentifier ||
+            e.employeeCode === cleanIdentifier ||
+            e.id === cleanIdentifier
+          );
+          if (!localEmp || !localEmp.email) {
+            return this.#createEnvelope(false, null, 'كود الموظف أو كلمة المرور غير صحيحة');
+          }
+          emailToAuth = String(localEmp.email).trim().toLowerCase();
+        }
+      }
+
+      if (!emailToAuth) {
+        return this.#createEnvelope(false, null, 'كود الموظف أو كلمة المرور غير صحيحة');
+      }
+
+      let emp = null;
+      let targetCompanyId = null;
+      let authUser = null;
+
+      if (supabase && supabase.auth) {
+        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+          email: emailToAuth,
+          password: cleanPass
+        });
+
+        if (authError || !authData?.user) {
+          const isCode = !cleanIdentifier.includes('@');
+          const errMsg = authError?.message === 'Invalid login credentials'
+            ? (isCode ? 'كود الموظف أو كلمة المرور غير صحيحة' : 'البريد الإلكتروني أو كلمة المرور غير صحيحة')
+            : (authError?.message || 'فشل تسجيل الدخول عبر خادم المصادقة');
+          return this.#createEnvelope(false, null, errMsg, { error: authError });
+        }
+
+        authUser = authData.user;
+
+        // جلب سجل الموظف من جدول employees باستخدام EMPLOYEE_PUBLIC_COLS و user_id
+        const { data: empData, error: empErr } = await supabase
+          .from('employees')
+          .select(EMPLOYEE_PUBLIC_COLS)
+          .eq('user_id', authUser.id)
+          .single();
+
+        if (empErr || !empData) {
+          return this.#createEnvelope(false, null, 'لم يتم العثور على سجل موظف نشط مرتبط بهذا الحساب');
+        }
+
+        if (empData.status !== 'active') {
+          await supabase.auth.signOut();
+          return this.#createEnvelope(false, null, 'تم إيقاف هذا الحساب أو أنه قيد المراجعة، يرجى مراجعة إدارة الموارد البشرية');
+        }
+
+        emp = this.#normalizeEmployee(empData);
+        targetCompanyId = empData.company_id;
+      } else {
+        // Fallback على قاعدة البيانات المحلية للتطوير والاختبارات
+        const db = LocalDatabase.getDB();
+        const localEmp = (db.employees || []).find(e =>
+          String(e.email || '').trim().toLowerCase() === emailToAuth
+        );
+        if (!localEmp) {
+          return this.#createEnvelope(false, null, cleanIdentifier.includes('@') ? 'البريد الإلكتروني أو كلمة المرور غير صحيحة' : 'كود الموظف أو كلمة المرور غير صحيحة');
+        }
+        if (localEmp.status !== 'active') {
+          return this.#createEnvelope(false, null, 'تم إيقاف هذا الحساب أو أنه قيد المراجعة، يرجى مراجعة إدارة الموارد البشرية');
+        }
+        emp = cloneData(localEmp);
+        targetCompanyId = emp.company_id || '11111111-2222-3333-4444-555555555555';
+      }
+
+      targetCompanyId = targetCompanyId || emp.company_id || '11111111-2222-3333-4444-555555555555';
+      this.setCurrentCompanyId(targetCompanyId);
+      emp.company_id = targetCompanyId;
+
+      const userRole = emp.role || 'employee';
+      const normalizedRole = (userRole === 'admin') ? 'programmer' : (userRole === 'hr' ? 'manager' : userRole);
+      const roleArabic = this.getRoleArabicTitle(userRole);
+      const db = LocalDatabase.getDB();
+      const rolePermissions = db.role_permissions?.[userRole] || db.role_permissions?.[normalizedRole] || db.role_permissions?.employee || {};
+
+      const authSession = {
+        employeeId: emp.id,
+        user_id: emp.user_id || authUser?.id || null,
+        company_id: targetCompanyId,
+        email: emp.email,
+        name: emp.fullName,
+        role: userRole,
+        loginTime: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 30 * 86400000).toISOString()
+      };
+
+      const storage = rememberMe ? localStorage : sessionStorage;
+      if (typeof storage !== 'undefined') {
+        storage.setItem('JISR_AUTH_SESSION', JSON.stringify(authSession));
+        storage.setItem('JISR_COMPANY_ID', targetCompanyId);
+      }
+
+      AuditMiddleware.log({
+        action: 'LOGIN',
+        actionType: 'تسجيل',
+        target: 'auth',
+        targetId: emp.id,
+        performedBy: {
+          id: emp.id,
+          name: emp.fullName,
+          role: userRole,
+          roleArabic: roleArabic
+        },
+        details: `تسجيل دخول ناجح للمستخدم: ${emp.fullName} (${emp.id}) بشركة (${targetCompanyId}) برتبة (${roleArabic}) باستخدام (${cleanIdentifier.includes('@') ? 'البريد الإلكتروني' : 'كود الموظف'})`
+      });
+
+      const responsePayload = {
+        role: userRole,
+        normalizedRole: normalizedRole,
+        roleArabic: roleArabic,
+        permissions: cloneData(rolePermissions),
+        user: cloneData(emp),
+        employee: cloneData(emp),
+        session: authSession,
+        company_id: targetCompanyId,
+        companyId: targetCompanyId
+      };
+
+      return this.#createEnvelope(true, responsePayload, null, {
+        ...responsePayload,
+        message: `مرحباً بك مجدداً يا ${emp.fullName} (${roleArabic})`
+      });
+    } catch (err) {
+      return this.#handleError(err, 'فشل في تسجيل الدخول');
+    }
+  }
+
+  static async loginWithCodeOrEmail(identifier, password, rememberMe = true) {
+    return this.loginWithEmailPassword(identifier, password, rememberMe);
+  }
+
+  /**
+   * دالة تسجيل الدخول الموحدة للنظام (Supabase Auth / RBAC Login)
    */
   static async login(credential, rememberMe = true) {
     try {
@@ -1755,13 +1962,15 @@ class ApiService {
       let cleanPin = null;
       let employeeId = null;
       let credentialEmail = null;
+      let credentialPassword = null;
       let shouldRemember = rememberMe;
 
       if (typeof credential === 'object' && credential !== null) {
+        if (credential.email) credentialEmail = String(credential.email).trim().toLowerCase();
+        if (credential.password) credentialPassword = String(credential.password);
         if (credential.pin !== undefined && credential.pin !== null) cleanPin = String(credential.pin).trim();
         if (credential.employeeId) employeeId = String(credential.employeeId).trim();
         if (credential.fingerprint) employeeId = String(credential.fingerprint).trim();
-        if (credential.email) credentialEmail = String(credential.email).trim().toLowerCase();
         if (credential.rememberMe !== undefined) shouldRemember = Boolean(credential.rememberMe);
       } else if (typeof credential === 'string' || typeof credential === 'number') {
         const str = String(credential).trim();
@@ -1774,307 +1983,161 @@ class ApiService {
         }
       }
 
-      if (!cleanPin && !employeeId && !credentialEmail) {
-        return this.#createEnvelope(false, null, 'يرجى إدخال رمز PIN أو التحقق عبر بصمة الإصبع أو البريد الإلكتروني');
+      // 1. تسجيل الدخول الرسمي بالبريد الإلكتروني وكلمة المرور عبر Supabase Auth
+      if (credentialEmail && credentialPassword) {
+        return await this.loginWithEmailPassword(credentialEmail, credentialPassword, shouldRemember);
       }
 
-      const authMethod = credentialEmail ? 'email' : (cleanPin ? 'pin' : 'fingerprint');
-      let emp = null;
-      let targetCompanyId = null;
-
-      // 1. استدعاء Supabase أولاً للتحقق من بيانات الموظف واستخراج company_id
-      if (supabase) {
-        try {
-          let query = supabase.from('employees').select('*, companies(*)');
-          if (credentialEmail) {
-            query = query.eq('email', credentialEmail);
-          } else if (cleanPin) {
-            query = query.eq('pin', cleanPin);
-          } else {
-            query = query.or(`id.eq.${employeeId},employee_code.eq.${employeeId}`);
-          }
-          const { data, error } = await query.order('created_at', { ascending: false }).limit(1);
-          if (data && data.length > 0 && !error) {
-            emp = this.#normalizeEmployee(data[0]);
-            targetCompanyId = data[0].company_id || (data[0].companies && data[0].companies.id);
-          }
-        } catch (sbErr) {
-          console.warn('[Supabase Login Fallback]:', sbErr);
-        }
+      // 2. إذا حاول المستخدم الدخول المباشر برمز الـ PIN
+      if (cleanPin) {
+        return this.#createEnvelope(
+          false,
+          null,
+          'تم إيقاف الدخول المباشر بالـ PIN مؤقتاً لدواعي الأمان، يرجى تسجيل الدخول بالبريد الإلكتروني وكلمة المرور.',
+          { message: 'تم إيقاف الدخول المباشر بالـ PIN مؤقتاً لدواعي الأمان، يرجى تسجيل الدخول بالبريد الإلكتروني وكلمة المرور.' }
+        );
       }
 
-      // 2. آلية Fallback على LocalDatabase في حال انقطاع الاتصال أو عدم العثور عليه
-      if (!emp) {
-        const db = LocalDatabase.getDB();
-        let localEmp = null;
-        if (credentialEmail) {
-          localEmp = (db.employees || []).find(e => String(e.email || '').trim().toLowerCase() === credentialEmail);
-        } else if (cleanPin) {
-          localEmp = (db.employees || []).find(e => String(e.pin).trim() === cleanPin);
-        } else {
-          localEmp = (db.employees || []).find(e => e.id === employeeId || e.employee_code === employeeId);
-        }
-        if (localEmp) {
-          emp = cloneData(localEmp);
-          targetCompanyId = localEmp.company_id || db.settings?.company_id || 'COMP-001';
-        }
-      }
+      // 3. التحقق عبر كود الموظف / البصمة الحيوية للكشك
+      if (employeeId) {
+        let emp = null;
+        let targetCompanyId = null;
 
-      // 3. التحقق الذكي من مديري الشركات (Manager PIN / Company Status Check)
-      // إذا لم يتم العثور على الموظف في جدول employees، نبحث هل الـ PIN مسجل كرمز مدير لشركة
-      if (!emp && cleanPin) {
-        let compRecord = null;
         if (supabase) {
           try {
-            const { data: compData } = await supabase
-              .from('companies')
-              .select('*')
-              .eq('manager_pin', cleanPin)
-              .order('created_at', { ascending: false })
+            const { data, error } = await supabase
+              .from('employees')
+              .select(EMPLOYEE_PUBLIC_COLS)
+              .or(`id.eq.${employeeId},employee_code.eq.${employeeId}`)
               .limit(1);
-            if (compData && compData.length > 0) compRecord = compData[0];
-          } catch (e) {
-            console.warn('[Login Company Lookup Warning]:', e);
+            if (data && data.length > 0 && !error) {
+              emp = this.#normalizeEmployee(data[0]);
+              targetCompanyId = data[0].company_id;
+            }
+          } catch (sbErr) {
+            console.warn('[Supabase Fingerprint Login Fallback]:', sbErr);
           }
         }
-        if (!compRecord) {
+
+        if (!emp) {
           const db = LocalDatabase.getDB();
-          compRecord = (db.companies || []).find(c => String(c.pin || c.manager_pin || '').trim() === cleanPin);
+          const localEmp = (db.employees || []).find(e => e.id === employeeId || e.employee_code === employeeId);
+          if (localEmp) {
+            emp = cloneData(localEmp);
+            targetCompanyId = localEmp.company_id || db.settings?.company_id || '11111111-2222-3333-4444-555555555555';
+          }
         }
 
-        if (compRecord) {
-          const cName = compRecord.name || compRecord.companyName || compRecord.company_name || 'الشركة';
-          if (compRecord.status === 'pending') {
-            return this.#createEnvelope(false, null, `طلب تسجيل شركة "${cName}" قيد المراجعة والاعتماد حالياً من قبل الإدارة وسيتم تفعيل حسابكم فوراً.`);
-          }
-          if (compRecord.status === 'suspended' || compRecord.is_active === false) {
-            return this.#createEnvelope(false, null, `تم إيقاف حساب شركة "${cName}". يرجى التواصل مع إدارة النظام.`);
-          }
-
-          // الشركة معتمدة ونشطة! إنشاء حساب الموظف المدير وتأمينه فوراً
-          targetCompanyId = compRecord.id;
-          const mgrName = compRecord.manager_name || compRecord.managerName || 'مدير عام الشركة';
-          const mgrEmail = compRecord.manager_email || compRecord.email || `admin@comp-${String(targetCompanyId).slice(0, 8)}.com`;
-          const mgrPhone = compRecord.manager_phone || compRecord.phone || '';
-
-          emp = this.#normalizeEmployee({
-            id: `MGR-${String(targetCompanyId).slice(0, 8)}`,
-            employee_code: `MGR-${String(targetCompanyId).slice(0, 8)}`,
-            company_id: targetCompanyId,
-            fullName: mgrName,
-            firstName: mgrName.split(' ')[0],
-            lastName: mgrName.split(' ').slice(1).join(' ') || '',
-            email: mgrEmail,
-            phone: mgrPhone,
-            pin: cleanPin,
-            role: 'admin',
-            status: 'active',
-            department: 'الإدارة العامة',
-            jobTitle: 'مدير عام الشركة (Admin)',
-            baseSalary: 15000,
-            housingAllowance: 2000,
-            transportAllowance: 1000,
-            otherAllowances: 1000,
-            salaryStatus: 'processing',
-            leaveBalance: 21,
-            hireDate: new Date().toISOString().split('T')[0]
-          });
-
-          // مزامنة فورية في جدول employees في Supabase إذا لم يكن موجوداً
-          if (supabase) {
-            const sbPayload = this.#toSupabaseEmployee(emp, targetCompanyId);
-            sbPayload.role = 'admin';
-            sbPayload.status = 'active';
-            await this.sbWrite(supabase.from('employees').upsert([sbPayload], { onConflict: 'email' }), 'مزامنة حساب المدير', {
-              table: 'employees',
-              id: emp.id,
-              record: emp,
-              action: 'upsert'
-            });
-          }
-
-          // حفظ محلياً في LocalDatabase لضمان استقرار العمل بلا انقطاع
-          const db = LocalDatabase.getDB();
-          if (!Array.isArray(db.employees)) db.employees = [];
-          const existIdx = db.employees.findIndex(e => e.id === emp.id || e.email === emp.email || e.pin === cleanPin);
-          if (existIdx >= 0) {
-            db.employees[existIdx] = { ...db.employees[existIdx], ...emp };
-          } else {
-            db.employees.push(emp);
-          }
-          LocalDatabase.saveDB(db);
+        if (!emp) {
+          return this.#createEnvelope(false, null, 'بصمة الإصبع أو كود الموظف غير مسجل بالنظام!');
         }
-      }
 
-      if (!emp) {
-        const errMsg = credentialEmail
-          ? 'البريد الإلكتروني المدخل غير مسجل بالنظام!'
-          : (cleanPin ? 'رمز PIN المدخل غير مسجل لأي حساب نشط بالنظام!' : 'بصمة الإصبع أو كود الموظف غير مسجل بالنظام!');
-        return this.#createEnvelope(false, null, errMsg, { message: errMsg });
-      }
-
-      // حماية مطلقة: حساب المبرمج الأصلي دائماً Super Admin / programmer
-      if (emp.email === 'aemade2016@gmail.com' || cleanPin === '050298' || credentialEmail === 'aemade2016@gmail.com' || emp.id === 'aa69f711-7ca3-41dc-b628-42a5dda853f6' || emp.role === 'programmer' || emp.employee_code === 'EMP-0001') {
-        emp.role = 'programmer';
-        emp.department = 'تقنية المعلومات';
-        emp.jobTitle = 'مبرمج ومطور برمجيات (Super Admin)';
-        emp.status = 'active';
-        emp.employee_code = 'EMP-0001';
-        emp.id = 'aa69f711-7ca3-41dc-b628-42a5dda853f6';
-        if (supabase) {
-          this.sbWrite(supabase.from('employees').update({
-            role: 'programmer',
-            department: 'تقنية المعلومات',
-            job_title: 'مدير النظام (Super Admin)',
-            employee_code: 'EMP-0001',
-            status: 'active'
-          }).eq('email', 'aemade2016@gmail.com'), 'تحديث حساب المبرمج');
+        if (emp.status === 'pending') {
+          return this.#createEnvelope(false, null, 'حسابك في انتظار اعتماد إدارة الموارد البشرية');
         }
-      }
 
-      if (emp.status === 'pending') {
-        return this.#createEnvelope(false, null, 'حسابك في انتظار اعتماد إدارة الموارد البشرية');
-      }
-
-      if (emp.status === 'suspended') {
-        return this.#createEnvelope(false, null, 'تم إيقاف هذا الحساب، يرجى مراجعة إدارة الموارد البشرية');
-      }
-
-      // استخراج وتأكيد اسم الشركة التابع لها الموظف
-      targetCompanyId = targetCompanyId || emp.company_id || '11111111-2222-3333-4444-555555555555';
-      this.setCurrentCompanyId(targetCompanyId);
-      emp.company_id = targetCompanyId;
-
-      const db = LocalDatabase.getDB();
-      if (!emp.company_name) {
-        const foundComp = (db.companies || []).find(c => c.id === targetCompanyId);
-        if (foundComp) emp.company_name = foundComp.name || foundComp.companyName;
-      }
-
-      const userRole = emp.role || 'employee';
-      const normalizedRole = (userRole === 'admin') ? 'programmer' : (userRole === 'hr' ? 'manager' : userRole);
-      const roleArabic = this.getRoleArabicTitle(userRole);
-      const rolePermissions = db.role_permissions?.[userRole] || db.role_permissions?.[normalizedRole] || db.role_permissions?.employee || {};
-
-      const session = {
-        employeeId: emp.id,
-        role: userRole,
-        normalizedRole: normalizedRole,
-        roleArabic: roleArabic,
-        authMethod: authMethod,
-        company_id: targetCompanyId,
-        companyId: targetCompanyId,
-        company_name: emp.company_name || null,
-        loginTime: new Date().toISOString(),
-        rememberMe: shouldRemember
-      };
-
-      if (typeof sessionStorage !== 'undefined') {
-        sessionStorage.setItem('JISR_COMPANY_ID', targetCompanyId);
-        sessionStorage.setItem('JISR_AUTH_SESSION', JSON.stringify(session));
-      }
-      if (typeof localStorage !== 'undefined') {
-        if (shouldRemember) {
-          localStorage.setItem('JISR_COMPANY_ID', targetCompanyId);
-          localStorage.setItem('JISR_AUTH_SESSION', JSON.stringify(session));
-        } else {
-          localStorage.removeItem('JISR_AUTH_SESSION');
+        if (emp.status === 'suspended') {
+          return this.#createEnvelope(false, null, 'تم إيقاف هذا الحساب، يرجى مراجعة إدارة الموارد البشرية');
         }
-      }
 
-      // تسجيل عملية تسجيل الدخول في سجل التدقيق
-      AuditMiddleware.log({
-        action: 'LOGIN',
-        actionType: 'تسجيل',
-        target: 'auth',
-        targetId: emp.id,
-        performedBy: {
-          id: emp.id,
-          name: emp.fullName,
+        targetCompanyId = targetCompanyId || emp.company_id || '11111111-2222-3333-4444-555555555555';
+        this.setCurrentCompanyId(targetCompanyId);
+        emp.company_id = targetCompanyId;
+
+        const db = LocalDatabase.getDB();
+        const userRole = emp.role || 'employee';
+        const normalizedRole = (userRole === 'admin') ? 'programmer' : (userRole === 'hr' ? 'manager' : userRole);
+        const roleArabic = this.getRoleArabicTitle(userRole);
+        const rolePermissions = db.role_permissions?.[userRole] || db.role_permissions?.[normalizedRole] || db.role_permissions?.employee || {};
+
+        const session = {
+          employeeId: emp.id,
           role: userRole,
-          roleArabic: roleArabic
-        },
-        details: `تسجيل دخول ناجح للمستخدم: ${emp.fullName} (${emp.id}) بشركة (${targetCompanyId}) برتبة (${roleArabic}) عبر ${authMethod === 'pin' ? 'رمز الـ PIN' : 'البصمة الحيوية'}`
-      });
+          normalizedRole: normalizedRole,
+          roleArabic: roleArabic,
+          authMethod: 'fingerprint',
+          company_id: targetCompanyId,
+          companyId: targetCompanyId,
+          company_name: emp.company_name || null,
+          loginTime: new Date().toISOString(),
+          rememberMe: shouldRemember
+        };
 
-      const responseData = {
-        role: userRole,
-        normalizedRole: normalizedRole,
-        roleArabic: roleArabic,
-        permissions: cloneData(rolePermissions),
-        session: session,
-        user: cloneData(emp),
-        employee: cloneData(emp),
-        company_id: targetCompanyId,
-        companyId: targetCompanyId
-      };
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.setItem('JISR_COMPANY_ID', targetCompanyId);
+          sessionStorage.setItem('JISR_AUTH_SESSION', JSON.stringify(session));
+        }
+        if (typeof localStorage !== 'undefined') {
+          if (shouldRemember) {
+            localStorage.setItem('JISR_COMPANY_ID', targetCompanyId);
+            localStorage.setItem('JISR_AUTH_SESSION', JSON.stringify(session));
+          } else {
+            localStorage.removeItem('JISR_AUTH_SESSION');
+          }
+        }
 
-      return this.#createEnvelope(true, responseData, null, {
-        ...responseData,
-        message: `مرحباً بك مجدداً يا ${emp.fullName} (${roleArabic})`
-      });
+        AuditMiddleware.log({
+          action: 'LOGIN',
+          actionType: 'تسجيل',
+          target: 'auth',
+          targetId: emp.id,
+          performedBy: {
+            id: emp.id,
+            name: emp.fullName,
+            role: userRole,
+            roleArabic: roleArabic
+          },
+          details: `تسجيل دخول ناجح للمستخدم: ${emp.fullName} (${emp.id}) بشركة (${targetCompanyId}) برتبة (${roleArabic}) عبر البصمة الحيوية`
+        });
+
+        const responseData = {
+          role: userRole,
+          normalizedRole: normalizedRole,
+          roleArabic: roleArabic,
+          permissions: cloneData(rolePermissions),
+          session: session,
+          user: cloneData(emp),
+          employee: cloneData(emp),
+          company_id: targetCompanyId,
+          companyId: targetCompanyId
+        };
+
+        return this.#createEnvelope(true, responseData, null, {
+          ...responseData,
+          message: `مرحباً بك مجدداً يا ${emp.fullName} (${roleArabic})`
+        });
+      }
+
+      if (credentialEmail) {
+        return this.#createEnvelope(false, null, 'يرجى إدخال كلمة المرور مع البريد الإلكتروني');
+      }
+
+      return this.#createEnvelope(false, null, 'يرجى إدخال البريد الإلكتروني وكلمة المرور لتسجيل الدخول');
     } catch (err) {
       return this.#handleError(err, 'فشل في تسجيل الدخول');
     }
   }
 
   static async loginWithPin(pin, rememberMe = true) {
-    return this.login({ pin, rememberMe }, rememberMe);
+    return this.#createEnvelope(
+      false,
+      null,
+      'تم إيقاف الدخول المباشر بالـ PIN مؤقتاً لدواعي الأمان، يرجى تسجيل الدخول بالبريد الإلكتروني وكلمة المرور.',
+      { message: 'تم إيقاف الدخول المباشر بالـ PIN مؤقتاً لدواعي الأمان، يرجى تسجيل الدخول بالبريد الإلكتروني وكلمة المرور.' }
+    );
   }
 
   /**
-   * فحص شامل لفريد بودن رمز الـ PIN على مستوى النظام بأكمله (Supabase + LocalDatabase)
-   * يضمن منع تكرار أي رمز PIN بين جميع الموظفين والشركات والمديرين
-   * @param {string} pin
-   * @param {string|null} [excludeEmployeeId=null]
-   * @param {string|null} [excludeCompanyId=null]
-   * @param {string|null} [excludeEmail=null]
-   * @returns {Promise<boolean>}
+   * فحص محلي لفريد بودن رمز الـ PIN في LocalDatabase
+   * دون استعلام مباشر على أعمدة pin المحجوبة بـ CLS في Supabase
    */
   static async isPinTaken(pin, excludeEmployeeId = null, excludeCompanyId = null, excludeEmail = null) {
     if (!pin) return false;
     const cleanPin = String(pin).trim();
     if (!cleanPin) return false;
 
-    // 1. فحص في Supabase (سواء في جدول employees أو companies)
-    if (supabase) {
-      try {
-        // فحص جدول الموظفين
-        let empQuery = supabase.from('employees').select('id, employee_code, pin, email').eq('pin', cleanPin);
-        if (excludeEmployeeId) {
-          const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(excludeEmployeeId);
-          if (isUUID) {
-            empQuery = empQuery.neq('id', excludeEmployeeId);
-          } else {
-            empQuery = empQuery.neq('employee_code', excludeEmployeeId);
-          }
-        }
-        if (excludeEmail) {
-          empQuery = empQuery.neq('email', excludeEmail);
-        }
-        const { data: emps, error: empErr } = await empQuery.limit(1);
-        if (!empErr && Array.isArray(emps) && emps.length > 0) {
-          return true;
-        }
-
-        // فحص جدول الشركات (manager_pin)
-        let compQuery = supabase.from('companies').select('id, manager_pin').eq('manager_pin', cleanPin);
-        if (excludeCompanyId) {
-          compQuery = compQuery.neq('id', excludeCompanyId);
-        }
-        const { data: comps, error: compErr } = await compQuery.limit(1);
-        if (!compErr && Array.isArray(comps) && comps.length > 0) {
-          return true;
-        }
-      } catch (sbErr) {
-        console.warn('[Supabase isPinTaken check]:', sbErr);
-      }
-    }
-
-    // 2. فحص في LocalDatabase
     const db = LocalDatabase.getDB();
 
-    // فحص الموظفين المحليين
     const isEmpMatch = (db.employees || []).some(e => {
       if (excludeEmployeeId && (e.id === excludeEmployeeId || e.employee_code === excludeEmployeeId)) return false;
       if (excludeEmail && e.email && e.email.toLowerCase() === excludeEmail.toLowerCase()) return false;
@@ -2082,7 +2145,6 @@ class ApiService {
     });
     if (isEmpMatch) return true;
 
-    // فحص الشركات المحلية
     const isCompMatch = (db.companies || []).some(c => {
       if (excludeCompanyId && (c.id === excludeCompanyId || c.company_id === excludeCompanyId)) return false;
       const cPin = String(c.pin || c.manager_pin || '').trim();
@@ -2094,7 +2156,140 @@ class ApiService {
   }
 
   static async loginWithFingerprint(employeeId, rememberMe = true) {
-    return this.login({ employeeId, rememberMe }, rememberMe);
+    try {
+      await this.simulateDelay(80);
+      let emp = null;
+      let targetCompanyId = null;
+      let authUser = null;
+
+      // 1. التحقق من وجود جلسة Supabase Auth صالحة ونشطة (أو محاولة تجديدها)
+      if (supabase && supabase.auth) {
+        let session = null;
+        try {
+          const { data: sessionData, error: sessionErr } = await supabase.auth.getSession();
+          if (sessionData?.session && !sessionErr) {
+            session = sessionData.session;
+          } else {
+            const { data: refreshData, error: refreshErr } = await supabase.auth.refreshSession();
+            if (refreshData?.session && !refreshErr) {
+              session = refreshData.session;
+            }
+          }
+        } catch (authEx) {
+          console.warn('[loginWithFingerprint getSession Warning]:', authEx);
+        }
+
+        if (!session || !session.user) {
+          return this.#createEnvelope(
+            false,
+            null,
+            'انتهت جلسة المصادقة الأمنية على هذا الجهاز. يرجى تسجيل الدخول بكود الموظف وكلمة المرور مرة واحدة لتجديد تفعيل البصمة على هذا الجهاز.',
+            {
+              sessionExpired: true,
+              message: 'انتهت جلسة المصادقة الأمنية على هذا الجهاز. يرجى تسجيل الدخول بكود الموظف وكلمة المرور مرة واحدة لتجديد تفعيل البصمة على هذا الجهاز.'
+            }
+          );
+        }
+
+        authUser = session.user;
+
+        // جلب الموظف النشط عبر user_id باستخدام EMPLOYEE_PUBLIC_COLS
+        const { data: empData, error: empErr } = await supabase
+          .from('employees')
+          .select(EMPLOYEE_PUBLIC_COLS)
+          .eq('user_id', authUser.id)
+          .single();
+
+        if (empErr || !empData) {
+          return this.#createEnvelope(false, null, 'لم يتم العثور على سجل موظف نشط مرتبط بهذه الجلسة');
+        }
+
+        if (empData.status !== 'active') {
+          await supabase.auth.signOut();
+          return this.#createEnvelope(false, null, 'تم إيقاف هذا الحساب أو أنه قيد المراجعة، يرجى مراجعة إدارة الموارد البشرية');
+        }
+
+        if (employeeId && empData.id !== employeeId && empData.employee_code !== employeeId) {
+          return this.#createEnvelope(false, null, 'بصمة الجهاز المسجلة تخص موظفاً آخر. يرجى اختيار الحساب المطابق أو تسجيل الدخول بكلمة المرور.');
+        }
+
+        emp = this.#normalizeEmployee(empData);
+        targetCompanyId = empData.company_id;
+      } else {
+        // Fallback للبيئة المحلية والاختبارات
+        const db = LocalDatabase.getDB();
+        const localEmp = (db.employees || []).find(e => e.id === employeeId || e.employee_code === employeeId);
+        if (!localEmp) {
+          return this.#createEnvelope(false, null, 'بصمة الإصبع أو كود الموظف غير مسجل بالنظام!');
+        }
+        if (localEmp.status !== 'active') {
+          return this.#createEnvelope(false, null, 'تم إيقاف هذا الحساب أو أنه قيد المراجعة، يرجى مراجعة إدارة الموارد البشرية');
+        }
+        emp = cloneData(localEmp);
+        targetCompanyId = emp.company_id || '11111111-2222-3333-4444-555555555555';
+      }
+
+      targetCompanyId = targetCompanyId || emp.company_id || '11111111-2222-3333-4444-555555555555';
+      this.setCurrentCompanyId(targetCompanyId);
+      emp.company_id = targetCompanyId;
+
+      const userRole = emp.role || 'employee';
+      const normalizedRole = (userRole === 'admin') ? 'programmer' : (userRole === 'hr' ? 'manager' : userRole);
+      const roleArabic = this.getRoleArabicTitle(userRole);
+      const db = LocalDatabase.getDB();
+      const rolePermissions = db.role_permissions?.[userRole] || db.role_permissions?.[normalizedRole] || db.role_permissions?.employee || {};
+
+      const authSession = {
+        employeeId: emp.id,
+        user_id: emp.user_id || authUser?.id || null,
+        company_id: targetCompanyId,
+        email: emp.email,
+        name: emp.fullName,
+        role: userRole,
+        authMethod: 'fingerprint',
+        loginTime: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 30 * 86400000).toISOString()
+      };
+
+      const storage = rememberMe ? localStorage : sessionStorage;
+      if (typeof storage !== 'undefined') {
+        storage.setItem('JISR_AUTH_SESSION', JSON.stringify(authSession));
+        storage.setItem('JISR_COMPANY_ID', targetCompanyId);
+      }
+
+      AuditMiddleware.log({
+        action: 'LOGIN',
+        actionType: 'تسجيل',
+        target: 'auth',
+        targetId: emp.id,
+        performedBy: {
+          id: emp.id,
+          name: emp.fullName,
+          role: userRole,
+          roleArabic: roleArabic
+        },
+        details: `تسجيل دخول ناجح للمستخدم: ${emp.fullName} (${emp.id}) بشركة (${targetCompanyId}) برتبة (${roleArabic}) عبر بصمة الجهاز`
+      });
+
+      const responseData = {
+        role: userRole,
+        normalizedRole: normalizedRole,
+        roleArabic: roleArabic,
+        permissions: cloneData(rolePermissions),
+        session: authSession,
+        user: cloneData(emp),
+        employee: cloneData(emp),
+        company_id: targetCompanyId,
+        companyId: targetCompanyId
+      };
+
+      return this.#createEnvelope(true, responseData, null, {
+        ...responseData,
+        message: `تم التحقق من بصمة الجهاز بنجاح! مرحباً بك يا ${emp.fullName} (${roleArabic})`
+      });
+    } catch (err) {
+      return this.#handleError(err, 'فشل تسجيل الدخول عبر البصمة');
+    }
   }
 
   static async logout() {
@@ -2130,18 +2325,25 @@ class ApiService {
      EMPLOYEE MANAGEMENT & ONBOARDING
      ========================================================================== */
 
-  static async getNextEmployeeId() {
+  static async getNextEmployeeId(companyId = null) {
     try {
-      const companyId = this.getCurrentCompanyId();
+      const targetCompanyId = companyId || this.getCurrentCompanyId();
       let nums = [];
       if (supabase) {
         try {
-          const { data } = await supabase
+          let query = supabase
             .from('employees')
-            .select('id, employee_code')
-            .eq('company_id', companyId);
+            .select('id, employee_code');
+          if (targetCompanyId) {
+            query = query.eq('company_id', targetCompanyId);
+          }
+          const { data } = await query;
           if (data && data.length > 0) {
-            nums = data.map(e => parseInt(String(e.employee_code || e.id).replace('EMP-', ''), 10)).filter(n => !isNaN(n) && n >= 1000);
+            nums = data.map(e => {
+              const code = String(e.employee_code || e.id || '');
+              const match = code.match(/(\d+)/);
+              return match ? parseInt(match[1], 10) : NaN;
+            }).filter(n => !isNaN(n) && n > 0);
           }
         } catch (e) {
           console.warn('[Supabase getNextEmployeeId Warning]:', e);
@@ -2150,15 +2352,65 @@ class ApiService {
 
       const db = LocalDatabase.getDB();
       const localNums = (db.employees || [])
-        .map(e => parseInt(String(e.employee_code || e.id).replace('EMP-', ''), 10))
-        .filter(n => !isNaN(n) && n >= 1000);
+        .filter(e => !targetCompanyId || !e.company_id || e.company_id === targetCompanyId)
+        .map(e => {
+          const code = String(e.employee_code || e.employeeCode || e.id || '');
+          const match = code.match(/(\d+)/);
+          return match ? parseInt(match[1], 10) : NaN;
+        })
+        .filter(n => !isNaN(n) && n > 0);
 
       const allNums = [...nums, ...localNums];
-      const maxId = allNums.length > 0 ? Math.max(...allNums) : 1000;
-      return `EMP-${maxId + 1}`;
+      const maxId = allNums.length > 0 ? Math.max(...allNums) : 0;
+      const nextNum = maxId + 1;
+      return `EMP-${String(nextNum).padStart(4, '0')}`;
     } catch (e) {
       return `EMP-${Date.now().toString().slice(-4)}`;
     }
+  }
+
+  static async getNextEmployeeCode(companyId = null) {
+    return this.getNextEmployeeId(companyId);
+  }
+
+  static async isEmployeeCodeTaken(code, excludeEmployeeId = null, companyId = null) {
+    if (!code) return false;
+    const cleanCode = String(code).trim().toUpperCase();
+    if (!cleanCode) return false;
+    const targetCompId = companyId || this.getCurrentCompanyId();
+
+    if (supabase) {
+      try {
+        let query = supabase
+          .from('employees')
+          .select('id, employee_code, company_id')
+          .ilike('employee_code', cleanCode);
+        if (targetCompId) {
+          query = query.eq('company_id', targetCompId);
+        }
+        const { data, error } = await query;
+        if (!error && Array.isArray(data) && data.length > 0) {
+          const match = data.some(e => {
+            if (excludeEmployeeId && (e.id === excludeEmployeeId || String(e.employee_code || '').toUpperCase() === String(excludeEmployeeId).toUpperCase())) {
+              return false;
+            }
+            return true;
+          });
+          if (match) return true;
+        }
+      } catch (e) {
+        console.warn('[isEmployeeCodeTaken Supabase Warning]:', e);
+      }
+    }
+
+    const db = LocalDatabase.getDB();
+    const localMatch = (db.employees || []).some(e => {
+      if (targetCompId && e.company_id && e.company_id !== targetCompId) return false;
+      if (excludeEmployeeId && (e.id === excludeEmployeeId || e.employee_code === excludeEmployeeId)) return false;
+      const c = String(e.employee_code || e.employeeCode || e.id || '').trim().toUpperCase();
+      return c === cleanCode;
+    });
+    return localMatch;
   }
 
   static async getPendingEmployees(signal = null) {
@@ -2171,7 +2423,7 @@ class ApiService {
         try {
           const { data, error } = await supabase
             .from('employees')
-            .select('*')
+            .select(EMPLOYEE_PUBLIC_COLS)
             .eq('company_id', companyId)
             .eq('status', 'pending');
           if (!error && Array.isArray(data)) {
@@ -2266,17 +2518,25 @@ class ApiService {
         registeredAt: new Date().toISOString()
       };
 
-      // 1. الحفظ في Supabase أولاً مع عزل company_id
+      // 1. الحفظ في Supabase أولاً مع عزل company_id واسترجاع UUID المولّد تلقائياً
       let sbSuccess = true;
       if (supabase) {
         const sbPayload = this.#toSupabaseEmployee(newEmp, companyId);
         sbPayload.status = 'pending';
+        let query = supabase.from('employees').insert([sbPayload]);
+        if (query && typeof query.select === 'function') {
+          query = query.select(EMPLOYEE_PUBLIC_COLS).single();
+        }
         const empWriteRes = await this.sbWrite(
-          supabase.from('employees').insert([sbPayload]),
+          query,
           'تسجيل انضمام موظف',
-          { table: 'employees', id: newId, record: newEmp, action: 'insert' }
+          { table: 'employees', id: newId, record: newEmp, action: 'insert', payload: sbPayload }
         );
-        if (!empWriteRes.success) sbSuccess = false;
+        if (empWriteRes.success && empWriteRes.data && empWriteRes.data.id) {
+          newEmp.id = empWriteRes.data.id;
+        } else if (!empWriteRes.success) {
+          sbSuccess = false;
+        }
       }
 
       // 2. الحفظ في LocalDatabase
@@ -2285,12 +2545,12 @@ class ApiService {
 
       // 3. تسجيل طلب اعتماد انضمام فوري في جدول الطلبات لربط الموظف بالإدارة فوراً
       const onboardingRequest = {
-        id: `REQ-ONB-${newId}`,
+        id: `REQ-ONB-${newEmp.id}`,
         company_id: companyId,
         company_name: companyName,
         companyName: companyName,
-        employee_id: newId,
-        employeeId: newId,
+        employee_id: newEmp.id,
+        employeeId: newEmp.id,
         type: 'onboarding',
         request_type: 'onboarding',
         status: 'pending',
@@ -2315,21 +2575,29 @@ class ApiService {
       db.requests.unshift(onboardingRequest);
 
       if (supabase) {
+        const sbOnbPayload = {
+          company_id: companyId,
+          employee_id: newEmp.id,
+          request_type: 'onboarding',
+          status: 'pending',
+          created_at: newEmp.registeredAt,
+          reason: `طلب انضمام موظف جديد بشركة (${companyName}) بقسم (${newEmp.department})`,
+          details: onboardingRequest.details
+        };
+        let query = supabase.from('requests').insert([sbOnbPayload]);
+        if (query && typeof query.select === 'function') {
+          query = query.select().single();
+        }
         const reqWriteRes = await this.sbWrite(
-          supabase.from('requests').insert([{
-            id: `REQ-ONB-${newId}`,
-            company_id: companyId,
-            employee_id: newId,
-            request_type: 'onboarding',
-            status: 'pending',
-            created_at: newEmp.registeredAt,
-            reason: `طلب انضمام موظف جديد بشركة (${companyName}) بقسم (${newEmp.department})`,
-            details: onboardingRequest.details
-          }]),
+          query,
           'إنشاء طلب انضمام موظف',
-          { table: 'requests', id: `REQ-ONB-${newId}`, record: onboardingRequest, action: 'insert' }
+          { table: 'requests', id: `REQ-ONB-${newEmp.id}`, record: onboardingRequest, action: 'insert', payload: sbOnbPayload }
         );
-        if (!reqWriteRes.success) sbSuccess = false;
+        if (reqWriteRes.success && reqWriteRes.data && reqWriteRes.data.id) {
+          onboardingRequest.id = reqWriteRes.data.id;
+        } else if (!reqWriteRes.success) {
+          sbSuccess = false;
+        }
       }
 
       LocalDatabase.saveDB(db);
@@ -2374,40 +2642,15 @@ class ApiService {
       const companyId = this.getCurrentCompanyId();
       const db = LocalDatabase.getDB();
 
-      // حماية صارمة مطلقة: منع تعديل أو اعتماد حساب المبرمج الأصلي للنظام تحت أي مسمى!
-      if (id === 'aa69f711-7ca3-41dc-b628-42a5dda853f6' || id === 'EMP-0001') {
-        return this.#createEnvelope(false, null, 'حساب المبرمج الأصلي محمي تماماً ومفعل كـ Super Admin ولا يمكن تعديله أو اعتماده كمرشح');
-      }
-
-      // البحث عن المرشح مع الاستبعاد التام والكامل لحساب المبرمج الأصلي
-      let emp = (db.employees || []).find(e => 
-        e.email !== 'aemade2016@gmail.com' &&
-        e.role !== 'programmer' &&
-        e.id !== 'aa69f711-7ca3-41dc-b628-42a5dda853f6' &&
-        (e.id === id || e.employee_code === id)
-      );
-
-      if (!emp && supabase) {
-        try {
-          const { data } = await supabase
-            .from('employees')
-            .select('*')
-            .eq('company_id', companyId)
-            .neq('email', 'aemade2016@gmail.com')
-            .or(`id.eq.${id},employee_code.eq.${id}`)
-            .maybeSingle();
-          if (data && data.email !== 'aemade2016@gmail.com' && data.role !== 'programmer') {
-            emp = this.#normalizeEmployee(data);
-            if (!Array.isArray(db.employees)) db.employees = [];
-            db.employees.push(emp);
-          }
-        } catch (e) {
-          console.warn('[Supabase getPendingEmployee Warning]:', e);
-        }
-      }
+      // البحث عن المرشح
+      let emp = await this.resolveEmployee(id);
 
       if (!emp) {
-        return this.#createEnvelope(false, null, 'الموظف غير موجود أو أنه حساب محمي');
+        return this.#createEnvelope(false, null, 'الموظف غير موجود');
+      }
+
+      if (emp.role === 'programmer') {
+        return this.#createEnvelope(false, null, 'حساب مبرمج النظام محمي ومفعل ولا يمكن تعديله أو اعتماده كمرشح');
       }
 
       emp.status = 'active';
@@ -2481,9 +2724,9 @@ class ApiService {
           reviewed_at: new Date().toISOString()
         };
         const reqWriteRes = await this.sbWrite(
-          supabase.from('requests').update(reqUpdatePayload).eq('id', `REQ-ONB-${emp.id || id}`).eq('company_id', companyId),
+          supabase.from('requests').update(reqUpdatePayload).eq('employee_id', emp.id || id).eq('company_id', companyId),
           'تحديث طلب اعتماد موظف',
-          { table: 'requests', id: `REQ-ONB-${emp.id || id}`, action: 'update', payload: reqUpdatePayload, match: { id: `REQ-ONB-${emp.id || id}`, company_id: companyId } }
+          { table: 'requests', id: `REQ-ONB-${emp.id || id}`, action: 'update', payload: reqUpdatePayload, match: { employee_id: emp.id || id, company_id: companyId } }
         );
         if (!reqWriteRes.success) sbSuccess = false;
       }
@@ -2524,30 +2767,27 @@ class ApiService {
       const companyId = this.getCurrentCompanyId();
       const db = LocalDatabase.getDB();
 
-      // حماية صارمة مطلقة: منع حذف حساب المبرمج الأصلي للنظام
-      if (id === 'aa69f711-7ca3-41dc-b628-42a5dda853f6' || id === 'EMP-0001') {
-        return this.#createEnvelope(false, null, 'حساب المبرمج الأصلي محمي تماماً ولا يمكن حذفه');
+      const emp = await this.resolveEmployee(id);
+      if (!emp) {
+        return this.#createEnvelope(false, null, 'الموظف غير موجود');
       }
 
-      const idx = (db.employees || []).findIndex(e => 
-        e.email !== 'aemade2016@gmail.com' &&
-        e.role !== 'programmer' &&
-        e.id !== 'aa69f711-7ca3-41dc-b628-42a5dda853f6' &&
-        (e.id === id || e.employee_code === id)
-      );
-      if (idx === -1) {
-        return this.#createEnvelope(false, null, 'الموظف غير موجود أو محمي');
+      if (emp.role === 'programmer') {
+        return this.#createEnvelope(false, null, 'حساب مبرمج النظام محمي تماماً ولا يمكن حذفه');
       }
 
-      const [removed] = db.employees.splice(idx, 1);
+      db.employees = (db.employees || []).filter(e => e.id !== emp.id && e.employee_code !== emp.employee_code);
 
       // 1. الحذف الآمن من Supabase
       let sbSuccess = true;
       if (supabase) {
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(emp.id || ''));
+        let delQ = supabase.from('employees').delete().eq('company_id', companyId);
+        delQ = isUUID ? delQ.eq('id', emp.id) : delQ.eq('employee_code', emp.id);
         const empWriteRes = await this.sbWrite(
-          supabase.from('employees').delete().eq('id', removed.id || id).eq('company_id', companyId),
+          delQ,
           'حذف موظف مرفوض',
-          { table: 'employees', id: removed.id || id, action: 'delete', match: { id: removed.id || id, company_id: companyId } }
+          { table: 'employees', id: emp.id, action: 'delete', match: { id: emp.id, company_id: companyId } }
         );
         if (!empWriteRes.success) sbSuccess = false;
 
@@ -2557,9 +2797,9 @@ class ApiService {
           reviewed_at: new Date().toISOString()
         };
         const reqWriteRes = await this.sbWrite(
-          supabase.from('requests').update(rejUpdate).eq('id', `REQ-ONB-${removed.id || id}`).eq('company_id', companyId),
+          supabase.from('requests').update(rejUpdate).eq('employee_id', emp.id).eq('company_id', companyId),
           'تحديث طلب رفض موظف',
-          { table: 'requests', id: `REQ-ONB-${removed.id || id}`, action: 'update', payload: rejUpdate, match: { id: `REQ-ONB-${removed.id || id}`, company_id: companyId } }
+          { table: 'requests', id: `REQ-ONB-${emp.id}`, action: 'update', payload: rejUpdate, match: { employee_id: emp.id, company_id: companyId } }
         );
         if (!reqWriteRes.success) sbSuccess = false;
       }
@@ -2567,7 +2807,7 @@ class ApiService {
       // تحديث حالة طلب الاعتماد في LocalDatabase
       if (Array.isArray(db.requests)) {
         const matchingReqs = db.requests.filter(r => 
-          (r.employeeId === id || r.employee_id === id || r.employeeId === removed.id || r.employee_id === removed.id || r.id === `REQ-ONB-${id}` || r.id === `REQ-ONB-${removed.id}`) &&
+          (r.employeeId === id || r.employee_id === id || r.employeeId === emp.id || r.employee_id === emp.id || r.id === `REQ-ONB-${id}` || r.id === `REQ-ONB-${emp.id}`) &&
           (r.type === 'onboarding' || r.request_type === 'onboarding')
         );
         matchingReqs.forEach(req => {
@@ -2586,17 +2826,17 @@ class ApiService {
         actionType: 'حذف',
         target: 'employees',
         targetId: id,
-        details: `رفض طلب تسجيل الموظف وحذف بياناته: ${removed.fullName} (${removed.id}) بشركة (${companyId})`
+        details: `رفض طلب تسجيل الموظف وحذف بياناته: ${emp.fullName} (${emp.id}) بشركة (${companyId})`
       });
 
       if (!sbSuccess) {
-        return this.#createEnvelope(false, cloneData(removed), 'تم رفض الموظف محلياً وتعذر التحديث السحابي حالياً', {
+        return this.#createEnvelope(false, cloneData(emp), 'تم رفض الموظف محلياً وتعذر التحديث السحابي حالياً', {
           pendingSync: true,
           message: 'تم رفض طلب التسجيل محلياً، وبانتظار المزامنة السحابية.'
         });
       }
 
-      return this.#createEnvelope(true, cloneData(removed), null, {
+      return this.#createEnvelope(true, cloneData(emp), null, {
         message: 'تم رفض طلب التسجيل وإلغاء بيانات الموظف بنجاح'
       });
     } catch (err) {
@@ -2608,36 +2848,58 @@ class ApiService {
     try {
       await this.simulateDelay(60);
       const companyId = this.getCurrentCompanyId();
-      const db = LocalDatabase.getDB();
-      const emp = (db.employees || []).find(e => e.id === id);
+      const emp = await this.resolveEmployee(id);
       if (!emp) return this.#createEnvelope(false, null, 'الموظف غير موجود');
+      const db = LocalDatabase.getDB();
+      const targetEmp = (db.employees || []).find(e => e.id === emp.id) || emp;
 
       const targetMonth = salesData.month || salesData.salesMonth || new Date().toISOString().slice(0, 7);
-      if (!emp.monthlySales) emp.monthlySales = {};
+      if (!targetEmp.monthlySales) targetEmp.monthlySales = {};
 
-      if (salesData.salesTarget !== undefined) emp.salesTarget = Number(salesData.salesTarget);
-      if (salesData.salesAchieved !== undefined) emp.salesAchieved = Number(salesData.salesAchieved);
-      if (salesData.commissionRate !== undefined) emp.commissionRate = Number(salesData.commissionRate);
-      emp.salesMonth = targetMonth;
+      const targetVal = salesData.target !== undefined ? Number(salesData.target) : (salesData.salesTarget !== undefined ? Number(salesData.salesTarget) : undefined);
+      const achievedVal = salesData.achieved !== undefined ? Number(salesData.achieved) : (salesData.salesAchieved !== undefined ? Number(salesData.salesAchieved) : undefined);
+      const commVal = salesData.commissionRate !== undefined ? Number(salesData.commissionRate) : undefined;
 
-      emp.monthlySales[targetMonth] = {
-        salesTarget: emp.salesTarget,
-        salesAchieved: emp.salesAchieved,
-        commissionRate: emp.commissionRate
+      if (targetVal !== undefined) targetEmp.salesTarget = targetVal;
+      if (achievedVal !== undefined) targetEmp.salesAchieved = achievedVal;
+      if (commVal !== undefined) targetEmp.commissionRate = commVal;
+      targetEmp.salesMonth = targetMonth;
+
+      targetEmp.monthlySales[targetMonth] = {
+        salesTarget: targetEmp.salesTarget,
+        salesAchieved: targetEmp.salesAchieved,
+        commissionRate: targetEmp.commissionRate
       };
 
       LocalDatabase.saveDB(db);
+
+      // تحديث فوري في Supabase مع مطابقة company_id
+      if (supabase) {
+        const updatePayload = {};
+        if (targetVal !== undefined) updatePayload.sales_target = targetVal;
+        if (achievedVal !== undefined) updatePayload.sales_achieved = achievedVal;
+        if (commVal !== undefined) updatePayload.commission_rate = commVal;
+
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(emp.id || ''));
+        let q = supabase.from('employees').update(updatePayload).eq('company_id', companyId);
+        q = isUUID ? q.eq('id', emp.id) : q.eq('employee_code', emp.id);
+        await this.sbWrite(
+          q,
+          'تحديث مبيعات وعمولة الموظف',
+          { table: 'employees', id: emp.id, action: 'update', payload: updatePayload, match: { id: emp.id, company_id: companyId } }
+        );
+      }
 
       AuditMiddleware.log({
         action: 'UPDATE_SALES_TARGET',
         actionType: 'تعديل',
         target: 'employees',
-        targetId: id,
-        details: `تحديث مستهدف المبيعات (${emp.salesTarget} ج.م) والعمولة (${emp.commissionRate}%) للموظف: ${emp.fullName} بشركة (${companyId})`,
+        targetId: emp.id,
+        details: `تحديث مستهدف المبيعات (${targetEmp.salesTarget} ج.م) والعمولة (${targetEmp.commissionRate}%) للموظف: ${targetEmp.fullName} بشركة (${companyId})`,
         payload: { ...salesData, company_id: companyId }
       });
 
-      return this.#createEnvelope(true, cloneData(emp), null, {
+      return this.#createEnvelope(true, cloneData(targetEmp), null, {
         message: 'تم تحديث أرقام المبيعات ونسبة العمولة بنجاح'
       });
     } catch (err) {
@@ -2649,18 +2911,31 @@ class ApiService {
     try {
       await this.simulateDelay(60);
       const companyId = this.getCurrentCompanyId();
-      const db = LocalDatabase.getDB();
-      const emp = (db.employees || []).find(e => e.id === id);
+      const emp = await this.resolveEmployee(id);
       if (!emp) return this.#createEnvelope(false, null, 'الموظف غير موجود');
-
-      emp.salaryStatus = salaryStatus;
+      const db = LocalDatabase.getDB();
+      const targetEmp = (db.employees || []).find(e => e.id === emp.id);
+      if (targetEmp) targetEmp.salaryStatus = salaryStatus;
       LocalDatabase.saveDB(db);
+
+      // تحديث فوري في Supabase مع مطابقة company_id
+      if (supabase) {
+        const updatePayload = { salary_status: salaryStatus };
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(emp.id || ''));
+        let q = supabase.from('employees').update(updatePayload).eq('company_id', companyId);
+        q = isUUID ? q.eq('id', emp.id) : q.eq('employee_code', emp.id);
+        await this.sbWrite(
+          q,
+          'تحديث حالة الراتب',
+          { table: 'employees', id: emp.id, action: 'update', payload: updatePayload, match: { id: emp.id, company_id: companyId } }
+        );
+      }
 
       AuditMiddleware.log({
         action: 'UPDATE_SALARY_STATUS',
         actionType: 'تعديل',
         target: 'employees',
-        targetId: id,
+        targetId: emp.id,
         details: `تحديث حالة الراتب للموظف (${emp.fullName}) إلى: ${salaryStatus} بشركة (${companyId})`
       });
 
@@ -2688,7 +2963,7 @@ class ApiService {
         try {
           const { data, error } = await supabase
             .from('companies')
-            .select('*')
+            .select(COMPANY_PUBLIC_COLS)
             .eq('id', companyId)
             .maybeSingle();
 
@@ -2782,7 +3057,7 @@ class ApiService {
         try {
           const { data, error } = await supabase
             .from('companies')
-            .select('*')
+            .select(COMPANY_PUBLIC_COLS)
             .eq('id', companyId)
             .maybeSingle();
 
@@ -2906,11 +3181,11 @@ class ApiService {
       const companyName = String(tenantData.companyName || '').trim();
       const managerName = String(tenantData.managerName || '').trim();
       const phone = String(tenantData.phone || '').trim();
-      const pin = String(tenantData.pin || '').trim();
+      const password = String(tenantData.password || tenantData.pin || '').trim();
 
-      if (!pin || pin.length < 4) {
-        return this.#createEnvelope(false, null, 'يرجى إدخال رمز PIN للمدير لا يقل عن 4 أرقام', {
-          message: 'يرجى إدخال رمز PIN للمدير لا يقل عن 4 أرقام'
+      if (!password || password.length < 6) {
+        return this.#createEnvelope(false, null, 'يرجى إدخال كلمة مرور للمدير لا تقل عن 6 خانات', {
+          message: 'يرجى إدخال كلمة مرور للمدير لا تقل عن 6 خانات'
         });
       }
 
@@ -2924,14 +3199,6 @@ class ApiService {
           (c.companyName && c.companyName.toLowerCase() === companyName.toLowerCase())
         )
       );
-
-      // فحص فريد وشامل لمنع تكرار رمز الـ PIN السري على مستوى النظام بأكمله
-      const pinTaken = await this.isPinTaken(pin, null, existingPending?.id);
-      if (pinTaken) {
-        return this.#createEnvelope(false, null, 'رمز الـ PIN السري هذا مستخدم بالفعل لحساب آخر بالنظام! يرجى اختيار رمز PIN سري مميز وغير مكرر.', {
-          message: 'رمز الـ PIN السري هذا مستخدم بالفعل لحساب آخر بالنظام! يرجى اختيار رمز PIN سري مميز وغير مكرر.'
-        });
-      }
 
       // 1. فحص عدم تكرار البريد الإلكتروني مع الشركات المفعلة فقط
       if (supabase && email) {
@@ -2988,33 +3255,58 @@ class ApiService {
         managerName: managerName,
         phone: phone,
         email: email,
-        pin: pin,
         status: 'pending',
         created_at: existingPending?.created_at || new Date().toISOString(),
         createdAt: existingPending?.createdAt || new Date().toISOString().split('T')[0]
       };
 
-      // 2. الإدراج أو التحديث المباشر في Supabase مع مطابقة أسماء الأعمدة 100%
+      // 2. محاولة إنشاء حساب المدير في Supabase Auth بكلمة المرور المسجلة
+      if (supabase && supabase.auth && email && password) {
+        try {
+          const { data: signUpData } = await supabase.auth.signUp({
+            email,
+            password,
+            options: {
+              data: {
+                full_name: managerName,
+                company_name: companyName,
+                role: 'manager'
+              }
+            }
+          });
+          if (signUpData?.user) {
+            newTenant.user_id = signUpData.user.id;
+          }
+        } catch (authEx) {
+          console.warn('[Supabase registerNewTenant signUp Warning]:', authEx);
+        }
+      }
+
+      // 3. استدعاء دالة التسجيل الآمنة register_new_tenant عبر Supabase RPC
       let sbSuccess = true;
-      if (supabase) {
-        const sbPayload = {
-          id: companyId,
-          name: companyName,
-          tax_number: taxNumber || null,
-          manager_name: managerName,
-          manager_phone: phone || null,
-          manager_email: email || null,
-          manager_pin: pin,
-          status: 'pending',
-          subscription_plan: 'basic',
-          is_active: true
+      if (supabase && typeof supabase.rpc === 'function') {
+        const rpcPayload = {
+          p_name: companyName,
+          p_tax_number: taxNumber || null,
+          p_manager_name: managerName,
+          p_manager_phone: phone || null,
+          p_manager_email: email || null,
+          p_manager_pin: password
         };
         const writeRes = await this.sbWrite(
-          supabase.from('companies').upsert([sbPayload], { onConflict: 'id' }),
-          'تسجيل شركة جديدة',
-          { table: 'companies', id: companyId, record: newTenant, action: 'upsert', payload: sbPayload, options: { onConflict: 'id' } }
+          supabase.rpc('register_new_tenant', rpcPayload),
+          'تسجيل شركة جديدة عبر RPC',
+          { table: 'companies', id: companyId, record: newTenant, action: 'rpc', payload: rpcPayload }
         );
-        if (!writeRes.success) sbSuccess = false;
+        if (writeRes.success && writeRes.data) {
+          const retId = typeof writeRes.data === 'string' ? writeRes.data : writeRes.data.id;
+          if (retId) {
+            newTenant.id = retId;
+            newTenant.company_id = retId;
+          }
+        } else if (!writeRes.success) {
+          sbSuccess = false;
+        }
       }
 
       // 3. الحفظ في LocalDatabase.companies
@@ -3064,17 +3356,13 @@ class ApiService {
         try {
           const { data, error } = await supabase
             .from('companies')
-            .select('*')
+            .select(COMPANY_PUBLIC_COLS)
             .order('created_at', { ascending: false });
 
           if (data && !error && data.length > 0) {
             tenants = data.map(d => {
               let mName = (d.manager_name || d.managerName || '').trim();
-              if (d.id === '11111111-2222-3333-4444-555555555555' || d.pin === '050298') {
-                if (!mName || mName.includes('?') || /\uFFFD/.test(mName)) {
-                  mName = 'م. أحمد عماد';
-                }
-              } else if (!mName || /\?{2,}/.test(mName)) {
+              if (!mName || mName.includes('?') || /\uFFFD/.test(mName) || /\?{2,}/.test(mName)) {
                 mName = 'المدير العام';
               }
 
@@ -3098,6 +3386,7 @@ class ApiService {
                 manager_name: mName,
                 phone: d.manager_phone || d.phone || '',
                 email: d.manager_email || d.email || '',
+                password: d.manager_pin || d.pin || '',
                 pin: d.manager_pin || d.pin || '',
                 status: d.status || 'pending',
                 createdAt: d.created_at || d.createdAt || new Date().toISOString()
@@ -3119,25 +3408,26 @@ class ApiService {
       if (tenants.length === 0) {
         tenants = cloneData(db.companies);
       } else {
-        // دمج الشركات المحلية غير المرفوعة بعد
+        // دمج الشركات المحلية وتحديث الحالة في حال تم اعتمادها محلياً
         db.companies.forEach(localC => {
-          if (!tenants.some(t => t.id === localC.id)) {
+          const match = tenants.find(t => t.id === localC.id);
+          if (!match) {
             tenants.push(localC);
+          } else if (localC.status === 'active' && match.status === 'pending') {
+            match.status = 'active';
           }
         });
       }
 
-      // تنظيف وتصحيح أي ترميز تالف في الشركة الافتراضية الأصلية فقط
+      // تنظيف وتصحيح أي أسماء مفقودة
       tenants.forEach(t => {
-        if (t.id === '11111111-2222-3333-4444-555555555555' || t.pin === '050298') {
-          if (!t.managerName || t.managerName.includes('?') || /\uFFFD/.test(t.managerName)) {
-            t.managerName = 'م. أحمد عماد';
-            t.manager_name = 'م. أحمد عماد';
-          }
-          if (!t.companyName || t.companyName.includes('?') || /\uFFFD/.test(t.companyName)) {
-            t.companyName = 'AE (HR-SYSTEM)';
-            t.name = 'AE (HR-SYSTEM)';
-          }
+        if (!t.managerName || t.managerName.includes('?') || /\uFFFD/.test(t.managerName)) {
+          t.managerName = 'المدير العام';
+          t.manager_name = 'المدير العام';
+        }
+        if (!t.companyName || t.companyName.includes('?') || /\uFFFD/.test(t.companyName)) {
+          t.companyName = 'AE (HR-SYSTEM)';
+          t.name = 'AE (HR-SYSTEM)';
         }
       });
 
@@ -3174,7 +3464,7 @@ class ApiService {
       // إذا لم تكن موجودة محلياً، نبحث عنها في Supabase
       if (!company && supabase) {
         try {
-          const { data } = await supabase.from('companies').select('*').eq('id', companyId).maybeSingle();
+          const { data } = await supabase.from('companies').select(COMPANY_PUBLIC_COLS).eq('id', companyId).maybeSingle();
           if (data) {
             company = {
               id: data.id,
@@ -3211,11 +3501,10 @@ class ApiService {
       // 2. تحديث حالة الشركة محلياً
       company.status = 'active';
 
-      // 3. إنشاء موظف جديد ليكون مدير هذه الشركة (role = 'admin')
+      // 3. إنشاء موظف جديد ليكون مدير هذه الشركة (role = 'manager')
       const managerName = company.managerName || company.manager_name || 'مدير الشركة';
       const managerEmail = company.email || company.manager_email || `admin@comp-${companyId.slice(0, 6)}.com`;
       const managerPhone = company.phone || company.manager_phone || '';
-      const managerPin = String(company.pin || company.manager_pin || '123456').trim();
 
       const managerId = await this.getNextEmployeeId();
       const managerEmp = this.#normalizeEmployee({
@@ -3227,11 +3516,10 @@ class ApiService {
         lastName: managerName.split(' ').slice(1).join(' ') || '',
         email: managerEmail,
         phone: managerPhone,
-        pin: managerPin,
-        role: 'admin',
+        role: 'manager',
         status: 'active',
         department: 'الإدارة العامة',
-        jobTitle: 'مدير عام الشركة (Admin)',
+        jobTitle: 'مدير عام الشركة',
         baseSalary: 15000,
         housingAllowance: 2000,
         transportAllowance: 1000,
@@ -3241,15 +3529,54 @@ class ApiService {
         hireDate: new Date().toISOString().split('T')[0]
       });
 
-      // 4. إدراج حساب المدير في جدول employees في Supabase
+      // ربط حساب المدير إذا كان معرف المستخدم user_id متوفراً مسبقاً من مرحلة التسجيل
+      if (company.user_id) {
+        managerEmp.user_id = company.user_id;
+      } else {
+        // لا يتم استدعاء supabase.auth.signUp هنا منعاً لاستبدال جلسة المبرمج الحالية في المتصفح
+        console.info('[Tenant Approval]: تم اعتماد حساب الشركة؛ وسيتم ربط حساب الدخول عبر البريد الإلكتروني أو دعوة المستخدم.');
+      }
+
+      // 4. إدراج أو تحديث حساب المدير في جدول employees في Supabase
       if (supabase) {
         const sbPayload = this.#toSupabaseEmployee(managerEmp, companyId);
-        sbPayload.role = 'admin';
+        sbPayload.role = 'manager';
         sbPayload.status = 'active';
+        delete sbPayload.pin;
+        if (managerEmp.user_id) sbPayload.user_id = managerEmp.user_id;
+
+        let existingEmp = null;
+        if (managerEmail) {
+          try {
+            const { data: found } = await supabase
+              .from('employees')
+              .select('id, email, company_id')
+              .eq('email', managerEmail)
+              .maybeSingle();
+            if (found) existingEmp = found;
+          } catch (e) {}
+        }
+
+        let empQuery;
+        let empAction = 'insert';
+        if (existingEmp) {
+          empAction = 'update';
+          managerEmp.id = existingEmp.id;
+          const updateFields = {
+            company_id: companyId,
+            status: 'active',
+            role: 'manager'
+          };
+          if (managerEmp.user_id) updateFields.user_id = managerEmp.user_id;
+          empQuery = supabase.from('employees').update(updateFields).eq('id', existingEmp.id);
+        } else {
+          empQuery = supabase.from('employees').insert([sbPayload]);
+        }
+
         const empRes = await this.sbWrite(
-          supabase.from('employees').insert([sbPayload]),
+          empQuery,
           'إنشاء حساب مدير الشركة المعتمدة',
-          { table: 'employees', id: managerEmp.id, record: managerEmp, action: 'insert', payload: sbPayload }
+          { table: 'employees', id: managerEmp.id, record: managerEmp, action: empAction, payload: sbPayload }
         );
         if (!empRes.success) sbSuccess = false;
       }
@@ -3439,6 +3766,9 @@ class ApiService {
       const employees = Array.isArray(db.employees) ? db.employees : [];
       const enriched = list.map(d => ({
         ...d,
+        nameEn: d.nameEn || d.name_en || '',
+        managerId: d.managerId || d.manager_id || null,
+        managerName: d.managerName || d.manager_name || '',
         employeeCount: employees.filter(e => e.department === d.name && e.status !== 'archived').length
       }));
 
@@ -3456,12 +3786,10 @@ class ApiService {
 
       if (supabase) {
         try {
-          const { data } = await supabase
-            .from('departments')
-            .select('*')
-            .eq('company_id', companyId)
-            .or(`id.eq.${idOrName},name.eq.${idOrName}`)
-            .maybeSingle();
+          const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(idOrName || '').trim());
+          let dq = supabase.from('departments').select('*').eq('company_id', companyId);
+          dq = isUUID ? dq.eq('id', idOrName) : dq.eq('name', idOrName);
+          const { data } = await dq.maybeSingle();
           if (data) dept = data;
         } catch (e) {
           console.warn('[Supabase getDepartmentById Warning]:', e);
@@ -3508,15 +3836,32 @@ class ApiService {
         createdAt: new Date().toISOString().split('T')[0]
       };
 
-      // 1. الإدراج في Supabase
+      // 1. الإدراج في Supabase مع مطابقة أسماء الأعمدة في قاعدة البيانات وترك Postgres يولّد UUID
       let sbSuccess = true;
       if (supabase) {
+        const sbDept = {
+          company_id: companyId,
+          name: name,
+          name_en: deptData.nameEn || deptData.name_en || '',
+          code: (deptData.code || name.slice(0, 3)).toUpperCase(),
+          description: deptData.description || '',
+          manager_id: deptData.managerId || deptData.manager_id || null,
+          manager_name: deptData.managerName || deptData.manager_name || ''
+        };
+        let query = supabase.from('departments').insert([sbDept]);
+        if (query && typeof query.select === 'function') {
+          query = query.select().single();
+        }
         const writeRes = await this.sbWrite(
-          supabase.from('departments').insert([newDept]),
+          query,
           'إنشاء قسم جديد',
-          { table: 'departments', id: newId, record: newDept, action: 'insert', payload: newDept }
+          { table: 'departments', id: newId, record: newDept, action: 'insert', payload: sbDept }
         );
-        if (!writeRes.success) sbSuccess = false;
+        if (writeRes.success && writeRes.data && writeRes.data.id) {
+          newDept.id = writeRes.data.id;
+        } else if (!writeRes.success) {
+          sbSuccess = false;
+        }
       }
 
       // 2. التحديث في LocalDatabase
@@ -3571,23 +3916,22 @@ class ApiService {
       if (deptData.managerId !== undefined) dept.managerId = deptData.managerId;
       if (deptData.managerName !== undefined) dept.managerName = deptData.managerName;
 
-      // 1. التحديث في Supabase مع فلتر company_id الإجباري
+      // 1. التحديث في Supabase مع فلتر company_id الإجباري وأسماء الأعمدة الفعلية
       let sbSuccess = true;
       if (supabase) {
         const updatePayload = {
           name: newName,
-          nameEn: dept.nameEn,
+          name_en: dept.nameEn || dept.name_en || '',
           code: dept.code,
           description: dept.description,
-          managerId: dept.managerId,
-          managerName: dept.managerName
+          manager_id: dept.managerId || dept.manager_id || null,
+          manager_name: dept.managerName || dept.manager_name || ''
         };
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(dept.id || '').trim());
+        let uq = supabase.from('departments').update(updatePayload).eq('company_id', companyId);
+        uq = isUUID ? uq.eq('id', dept.id) : uq.eq('name', oldName);
         const writeRes = await this.sbWrite(
-          supabase
-            .from('departments')
-            .update(updatePayload)
-            .eq('id', dept.id)
-            .eq('company_id', companyId),
+          uq,
           'تحديث بيانات القسم',
           { table: 'departments', id: dept.id, record: dept, action: 'update', payload: updatePayload, match: { id: dept.id, company_id: companyId } }
         );
@@ -3653,12 +3997,11 @@ class ApiService {
       // 1. الحذف من Supabase
       let sbSuccess = true;
       if (supabase) {
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(target.id || '').trim());
+        let delQ = supabase.from('departments').delete().eq('company_id', companyId);
+        delQ = isUUID ? delQ.eq('id', target.id) : delQ.eq('name', target.name);
         const writeRes = await this.sbWrite(
-          supabase
-            .from('departments')
-            .delete()
-            .eq('id', target.id)
-            .eq('company_id', companyId),
+          delQ,
           'حذف قسم إداري',
           { table: 'departments', id: target.id, action: 'delete', match: { id: target.id, company_id: companyId } }
         );
@@ -3767,7 +4110,19 @@ class ApiService {
             .eq('company_id', companyId)
             .order('created_at', { ascending: false });
 
-          if (filters.employeeId) query = query.eq('employee_id', filters.employeeId);
+          if (filters.employeeId && filters.employeeId !== 'all') {
+            const cleanEmpId = String(filters.employeeId).trim();
+            const isEmpUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanEmpId);
+            if (isEmpUUID) {
+              query = query.eq('employee_id', cleanEmpId);
+            } else {
+              const db = LocalDatabase.getDB();
+              const foundEmp = (db.employees || []).find(e => e.id === cleanEmpId || e.employee_code === cleanEmpId);
+              if (foundEmp && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(foundEmp.id || ''))) {
+                query = query.eq('employee_id', foundEmp.id);
+              }
+            }
+          }
           if (filters.type && filters.type !== 'all') query = query.eq('request_type', filters.type);
           if (filters.status && filters.status !== 'all') query = query.eq('status', filters.status);
 
@@ -3912,21 +4267,26 @@ class ApiService {
     try {
       await this.simulateDelay(100, signal);
       const companyId = this.getCurrentCompanyId();
-      const db = LocalDatabase.getDB();
-      const emp = (db.employees || []).find(e => e.id === requestData.employeeId);
+      const rawEmpId = requestData.employeeId || requestData.employee_id;
+      const emp = await this.resolveEmployee(rawEmpId, signal);
       if (!emp) return this.#createEnvelope(false, null, 'الموظف غير موجود');
 
+      const db = LocalDatabase.getDB();
+
+      const isUUID = (val) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(val || '').trim());
+      const hasValidUUID = isUUID(requestData.id);
       const type = requestData.type || 'annual_leave';
       const typeName = this.getRequestTypeName(type);
-      const newId = `REQ-${Date.now()}`;
+      const newId = hasValidUUID ? requestData.id : (requestData.id || `REQ-${Date.now()}`);
       const submittedAt = new Date().toISOString();
 
       const newRequest = {
         id: newId,
         company_id: companyId,
         employeeId: emp.id,
-        employeeName: emp.fullName,
-        department: emp.department,
+        employee_id: emp.id,
+        employeeName: emp.fullName || `${emp.first_name || ''} ${emp.last_name || ''}`.trim(),
+        department: emp.department || '',
         type: type,
         typeName: typeName,
         title: requestData.title || `طلب ${typeName}`,
@@ -3946,11 +4306,10 @@ class ApiService {
         ...requestData
       };
 
-      // 1. الإدراج في Supabase أولاً مع حقل company_id الإجباري
+      // 1. الإدراج في Supabase أولاً مع حقل company_id الإجباري وتوليد UUID تلقائياً
       let sbSuccess = true;
       if (supabase) {
         const sbReq = {
-          id: newId,
           company_id: companyId,
           employee_id: emp.id,
           request_type: type,
@@ -3958,12 +4317,20 @@ class ApiService {
           status: newRequest.status,
           created_at: submittedAt
         };
+        let query = supabase.from('requests').insert([sbReq]);
+        if (query && typeof query.select === 'function') {
+          query = query.select().single();
+        }
         const writeRes = await this.sbWrite(
-          supabase.from('requests').insert([sbReq]),
+          query,
           'إنشاء طلب جديد',
           { table: 'requests', id: newId, record: newRequest, action: 'insert', payload: sbReq }
         );
-        if (!writeRes.success) sbSuccess = false;
+        if (writeRes.success && writeRes.data && writeRes.data.id) {
+          newRequest.id = writeRes.data.id;
+        } else if (!writeRes.success) {
+          sbSuccess = false;
+        }
       }
 
       // 2. المزامنة مع LocalDatabase
@@ -4196,6 +4563,43 @@ class ApiService {
         logs = logs.filter(l => !l.company_id || l.company_id === companyId);
       }
 
+      // جلب السجلات من Supabase أولاً عند توفر عميل السحابة
+      if (supabase && companyId) {
+        try {
+          const fromQ = supabase.from('audit_logs');
+          let q = fromQ && typeof fromQ.select === 'function' ? fromQ.select('*') : null;
+          if (q && typeof q.eq === 'function') q = q.eq('company_id', companyId);
+          if (q && typeof q.order === 'function') q = q.order('created_at', { ascending: false });
+          if (q && typeof q.limit === 'function') q = q.limit(200);
+          const { data: sbLogs, error: sbErr } = q ? (await q) : { data: null, error: null };
+
+          if (!sbErr && Array.isArray(sbLogs) && sbLogs.length > 0) {
+            const mapped = sbLogs.map(sl => ({
+              id: sl.id,
+              company_id: sl.company_id,
+              timestamp: sl.created_at || new Date().toISOString(),
+              dateFormatted: sl.created_at ? AuditMiddleware.formatEgyptianDateTime(new Date(sl.created_at)) : '',
+              performedBy: {
+                id: sl.performed_by || 'SYSTEM',
+                name: sl.performed_by || 'النظام الآلي',
+                role: 'system',
+                roleArabic: 'مستخدم'
+              },
+              action: sl.action || 'MUTATE_DATA',
+              actionType: 'تعديل',
+              target: sl.target || 'system',
+              targetId: sl.target_id || null,
+              details: sl.details || '',
+              payloadSummary: null
+            }));
+            const seenIds = new Set(mapped.map(m => m.id));
+            logs = [...mapped, ...logs.filter(l => !seenIds.has(l.id))];
+          }
+        } catch (sbEx) {
+          console.warn('[Supabase getAuditLogs Warning]:', sbEx);
+        }
+      }
+
       if (filters.actionType && filters.actionType !== 'all') {
         logs = logs.filter(l => l.actionType === filters.actionType);
       }
@@ -4268,12 +4672,25 @@ class ApiService {
         try {
           const { data, error } = await supabase
             .from('employees')
-            .select('*')
+            .select(EMPLOYEE_PUBLIC_COLS)
             .eq('company_id', companyId)
             .order('created_at', { ascending: false });
 
           if (!error && Array.isArray(data)) {
             employees = data.map(e => this.#normalizeEmployee(e));
+            // مزامنة الموظفين المسترجعين من السحابة في LocalDatabase
+            try {
+              const db = LocalDatabase.getDB();
+              if (!Array.isArray(db.employees)) db.employees = [];
+              employees.forEach(emp => {
+                const idx = db.employees.findIndex(e => e.id === emp.id || (e.employee_code && e.employee_code === emp.employee_code));
+                if (idx !== -1) db.employees[idx] = emp;
+                else db.employees.push(emp);
+              });
+              LocalDatabase.saveDB(db);
+            } catch (cacheErr) {
+              console.warn('[Cache Supabase Employees Warning]:', cacheErr);
+            }
           }
         } catch (sbErr) {
           console.warn('[Supabase getEmployees Fallback]:', sbErr);
@@ -4300,38 +4717,68 @@ class ApiService {
     }
   }
 
+  /**
+   * دالة موحدة وحصينة لجلب الموظف بالـ UUID أو كود الموظف (employee_code)
+   * تبحث في LocalDatabase ثم Supabase عبر EMPLOYEE_PUBLIC_COLS دون إرسال كود نصي لعمود UUID
+   */
+  static async resolveEmployee(idOrCode, signal = null) {
+    if (!idOrCode) return null;
+    const clean = String(idOrCode).trim();
+    if (!clean) return null;
+
+    const db = LocalDatabase.getDB();
+    let emp = (db.employees || []).find(e => 
+      e.id === clean || 
+      e.employee_code === clean || 
+      e.employeeCode === clean
+    );
+    if (emp) return cloneData(emp);
+
+    // البحث في Supabase مع مراعاة هل المعرف UUID أم employee_code
+    if (supabase) {
+      try {
+        const companyId = this.getCurrentCompanyId();
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clean);
+        let q = supabase
+          .from('employees')
+          .select(EMPLOYEE_PUBLIC_COLS)
+          .eq('company_id', companyId);
+        q = isUUID ? q.eq('id', clean) : q.eq('employee_code', clean);
+        const { data, error } = await q.maybeSingle();
+        if (!error && data) {
+          emp = this.#normalizeEmployee(data);
+          if (!Array.isArray(db.employees)) db.employees = [];
+          const idx = db.employees.findIndex(e => e.id === emp.id || (e.employee_code && e.employee_code === emp.employee_code));
+          if (idx !== -1) db.employees[idx] = emp;
+          else db.employees.push(emp);
+          LocalDatabase.saveDB(db);
+          return cloneData(emp);
+        }
+      } catch (e) {
+        console.warn('[Supabase resolveEmployee Warning]:', e);
+      }
+    }
+
+    // محاولة أخيرة عبر getEmployees للبحث الشامل
+    try {
+      const res = await this.getEmployees(signal);
+      const found = (res.data || []).find(e => 
+        e.id === clean || 
+        e.employee_code === clean || 
+        e.employeeCode === clean
+      );
+      if (found) return cloneData(found);
+    } catch (e) {
+      console.warn('[resolveEmployee getEmployees Warning]:', e);
+    }
+
+    return null;
+  }
+
   static async getEmployeeById(id, signal = null) {
     try {
       await this.simulateDelay(40, signal);
-      const companyId = this.getCurrentCompanyId();
-      let emp = null;
-
-      // 1. استدعاء الموظف من Supabase مع فلتر company_id
-      if (supabase) {
-        try {
-          const { data } = await supabase
-            .from('employees')
-            .select('*')
-            .eq('id', id)
-            .eq('company_id', companyId)
-            .maybeSingle();
-          if (data) emp = this.#normalizeEmployee(data);
-        } catch (e) {
-          console.warn('[Supabase getEmployeeById Warning]:', e);
-        }
-      }
-
-      if (!emp) {
-        const db = LocalDatabase.getDB();
-        const found = (db.employees || []).find(e => e.id === id || e.employee_code === id);
-        if (found) emp = this.#normalizeEmployee(found);
-      }
-
-      if (!emp) {
-        const res = await this.getEmployees(signal);
-        emp = (res.data || []).find(e => e.id === id || e.employee_code === id);
-      }
-
+      const emp = await this.resolveEmployee(id, signal);
       if (!emp) return this.#createEnvelope(false, null, 'الموظف غير موجود');
       return this.#createEnvelope(true, cloneData(emp));
     } catch (err) {
@@ -4342,28 +4789,7 @@ class ApiService {
   static async findEmployee(query, signal = null) {
     try {
       await this.simulateDelay(40, signal);
-      const companyId = this.getCurrentCompanyId();
-      let emp = null;
-
-      if (supabase) {
-        try {
-          const { data } = await supabase
-            .from('employees')
-            .select('*')
-            .eq('company_id', companyId)
-            .or(`id.eq.${query},pin.eq.${query}`)
-            .maybeSingle();
-          if (data) emp = this.#normalizeEmployee(data);
-        } catch (e) {
-          console.warn('[Supabase getEmployeeById Warning]:', e);
-        }
-      }
-
-      if (!emp) {
-        const db = LocalDatabase.getDB();
-        emp = (db.employees || []).find(e => e.id === query || String(e.pin).trim() === String(query).trim());
-      }
-
+      const emp = await this.resolveEmployee(query, signal);
       return emp
         ? this.#createEnvelope(true, cloneData(emp))
         : this.#createEnvelope(false, null, 'الموظف غير موجود', { message: 'الموظف غير موجود' });
@@ -4389,8 +4815,25 @@ class ApiService {
         }
       }
 
-      if (empData.pin) {
-        const pinTaken = await this.isPinTaken(empData.pin);
+      // تحديد كود الموظف والتحقق من عدم تكراره داخل نفس الشركة
+      const rawCode = empData.employee_code || empData.employeeCode || empData.id;
+      const proposedCode = rawCode ? String(rawCode).trim() : await this.getNextEmployeeId(companyId);
+
+      const codeTaken = await this.isEmployeeCodeTaken(proposedCode, null, companyId);
+      if (codeTaken) {
+        return this.#createEnvelope(false, null, `كود الموظف (${proposedCode}) مستخدم بالفعل داخل هذه المنشأة! يرجى اختيار كود آخر.`, {
+          message: `كود الموظف (${proposedCode}) مستخدم بالفعل داخل هذه المنشأة! يرجى اختيار كود آخر.`
+        });
+      }
+
+      const hasValidPin = empData.pin && 
+        String(empData.pin).trim() !== '' && 
+        String(empData.pin).trim() !== 'undefined' && 
+        /^\d{6}$/.test(String(empData.pin).trim());
+
+      if (hasValidPin) {
+        const cleanPin = String(empData.pin).trim();
+        const pinTaken = await this.isPinTaken(cleanPin);
         if (pinTaken) {
           return this.#createEnvelope(false, null, 'رمز الـ PIN المدخل مستخدم بالفعل لحساب آخر بالنظام! يرجى اختيار رمز PIN فريد.', {
             message: 'رمز الـ PIN المدخل مستخدم بالفعل لحساب آخر بالنظام! يرجى اختيار رمز PIN فريد.'
@@ -4398,7 +4841,7 @@ class ApiService {
         }
       }
 
-      const newId = empData.id || await this.getNextEmployeeId();
+      const newId = empData.id || proposedCode;
       const normalized = this.#normalizeEmployee({
         role: 'employee',
         status: 'active',
@@ -4409,19 +4852,30 @@ class ApiService {
         leaveBalance: 21,
         ...empData,
         id: newId,
+        employee_code: proposedCode,
+        employeeCode: proposedCode,
+        pin: hasValidPin ? String(empData.pin).trim() : null,
         company_id: companyId
       });
 
-      // 1. الإدراج في Supabase أولاً مع حقل company_id
+      // 1. الإدراج في Supabase أولاً مع حقل company_id واسترجاع UUID المولّد
       let sbSuccess = true;
       if (supabase) {
         const sbPayload = this.#toSupabaseEmployee(normalized, companyId);
+        let query = supabase.from('employees').insert([sbPayload]);
+        if (query && typeof query.select === 'function') {
+          query = query.select(EMPLOYEE_PUBLIC_COLS).single();
+        }
         const writeRes = await this.sbWrite(
-          supabase.from('employees').insert([sbPayload]),
+          query,
           'إضافة موظف جديد',
           { table: 'employees', id: newId, record: normalized, action: 'insert', payload: sbPayload }
         );
-        if (!writeRes.success) sbSuccess = false;
+        if (writeRes.success && writeRes.data && writeRes.data.id) {
+          normalized.id = writeRes.data.id;
+        } else if (!writeRes.success) {
+          sbSuccess = false;
+        }
       }
 
       // 2. الحفظ في LocalDatabase
@@ -4434,7 +4888,7 @@ class ApiService {
         actionType: 'إضافة',
         target: 'employees',
         targetId: newId,
-        details: `إضافة موظف جديد: ${normalized.fullName} (${newId}) بشركة (${companyId}) - قسم ${normalized.department}`,
+        details: `إضافة موظف جديد: ${normalized.fullName} (${newId}) بشركة (${companyId}) - قسم ${normalized.department} - كود (${proposedCode})`,
         payload: { ...empData, company_id: companyId }
       });
 
@@ -4488,7 +4942,26 @@ class ApiService {
         (safeFields.email && e.email && e.email.toLowerCase() === String(safeFields.email).toLowerCase())
       );
 
-      if (safeFields.pin) {
+      // فحص وتحديث كود الموظف
+      if (safeFields.employee_code || safeFields.employeeCode) {
+        const newCode = String(safeFields.employee_code || safeFields.employeeCode).trim();
+        const codeTaken = await this.isEmployeeCodeTaken(newCode, id, companyId);
+        if (codeTaken) {
+          return this.#createEnvelope(false, null, `كود الموظف (${newCode}) مستخدم بالفعل داخل هذه المنشأة! يرجى اختيار كود آخر.`, {
+            message: `كود الموظف (${newCode}) مستخدم بالفعل داخل هذه المنشأة! يرجى اختيار كود آخر.`
+          });
+        }
+        safeFields.employee_code = newCode;
+        safeFields.employeeCode = newCode;
+      }
+
+      // فحص وتحديث رمز PIN: لا يُعدل ولا يُرسل إلا إذا كان 6 أرقام صالحة
+      const hasValidPin = safeFields.pin && 
+        String(safeFields.pin).trim() !== '' && 
+        String(safeFields.pin).trim() !== 'undefined' && 
+        /^\d{6}$/.test(String(safeFields.pin).trim());
+
+      if (hasValidPin) {
         const cleanNewPin = String(safeFields.pin).trim();
         const currentPin = currentEmp ? String(currentEmp.pin || '').trim() : null;
 
@@ -4504,13 +4977,18 @@ class ApiService {
             });
           }
         }
+        safeFields.pin = cleanNewPin;
+      } else {
+        // حماية تامة: إذا لم يُدخل قيمة جديدة صحيحة (6 أرقام) يُحذف حقل الـ PIN تماماً
+        delete safeFields.pin;
       }
 
       // 1. التحديث في Supabase أولاً مع فلتر company_id الإجباري
       let sbSuccess = true;
       if (supabase) {
         const sbUpdate = {};
-        if (safeFields.pin) sbUpdate.pin = String(safeFields.pin).trim();
+        if (safeFields.employee_code) sbUpdate.employee_code = safeFields.employee_code;
+        if (safeFields.pin) sbUpdate.pin = safeFields.pin;
         if (safeFields.role) sbUpdate.role = safeFields.role;
         if (safeFields.status) sbUpdate.status = safeFields.status;
         if (safeFields.department) sbUpdate.department = safeFields.department;
@@ -4526,11 +5004,11 @@ class ApiService {
 
         if (Object.keys(sbUpdate).length > 0) {
           let supQuery = supabase.from('employees').update(sbUpdate);
-          const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+          const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id || '').trim());
           if (isUUID) {
             supQuery = supQuery.eq('id', id);
           } else {
-            supQuery = supQuery.or(`id.eq.${id},employee_code.eq.${id}`);
+            supQuery = supQuery.eq('employee_code', id);
           }
           const writeRes = await this.sbWrite(
             supQuery.eq('company_id', companyId),
@@ -4682,12 +5160,11 @@ class ApiService {
       // 1. الحذف من Supabase مع فلتر company_id الإجباري
       let sbSuccess = true;
       if (supabase) {
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id || '').trim());
+        let delQuery = supabase.from('employees').delete().eq('company_id', companyId);
+        delQuery = isUUID ? delQuery.eq('id', id) : delQuery.eq('employee_code', id);
         const writeRes = await this.sbWrite(
-          supabase
-            .from('employees')
-            .delete()
-            .eq('id', id)
-            .eq('company_id', companyId),
+          delQuery,
           'حذف موظف',
           { table: 'employees', id, action: 'delete', match: { id, company_id: companyId } }
         );
@@ -4765,29 +5242,11 @@ class ApiService {
 
       // 2. التحقق من هوية الموظف في نطاق نفس الشركة (company_id)
       let employee = null;
-      if (supabase) {
-        try {
-          let empQuery = supabase.from('employees').select('*').eq('company_id', companyId);
-          if (input.employeeId) {
-            empQuery = empQuery.or(`id.eq.${input.employeeId},employee_code.eq.${input.employeeId}`);
-          } else if (input.pin) {
-            empQuery = empQuery.eq('pin', String(input.pin).trim());
-          }
-          const { data: empData } = await empQuery.maybeSingle();
-          if (empData) employee = this.#normalizeEmployee(empData);
-        } catch (e) {
-          console.warn('[Supabase Attendance Employee Query Warning]:', e);
-        }
-      }
-
-      if (!employee) {
-        if (input.employeeId) {
-          const localE = (db.employees || []).find(e => e.id === input.employeeId || e.employee_code === input.employeeId);
-          if (localE) employee = cloneData(localE);
-        } else if (input.pin) {
-          const localE = (db.employees || []).find(e => String(e.pin).trim() === String(input.pin).trim());
-          if (localE) employee = cloneData(localE);
-        }
+      if (input.employeeId) {
+        employee = await this.resolveEmployee(input.employeeId, signal);
+      } else if (input.pin) {
+        const localE = (db.employees || []).find(e => String(e.pin).trim() === String(input.pin).trim());
+        if (localE) employee = cloneData(localE);
       }
 
       if (!employee) {
@@ -4976,27 +5435,37 @@ class ApiService {
           notes: message
         };
 
-        // إدراج الحضور في Supabase أولاً
+        // إدراج الحضور في Supabase مع الحقول الرقمية وتوليد UUID تلقائياً
         let sbSuccess = true;
         if (supabase) {
           const attPayload = {
-            id: newRecord.id,
             company_id: companyId,
             employee_id: employee.id,
             date: todayStr,
             check_in: now.toISOString(),
             check_in_lat: locationCoords.lat || null,
             check_in_lng: locationCoords.lng || null,
+            actual_hours: 0,
             late_minutes: netLateMins,
+            early_leave_minutes: 0,
+            overtime_hours: 0,
             status: status,
             notes: message
           };
+          let query = supabase.from('attendance').upsert([attPayload], { onConflict: 'company_id,employee_id,date' });
+          if (query && typeof query.select === 'function') {
+            query = query.select().single();
+          }
           const writeRes = await this.sbWrite(
-            supabase.from('attendance').upsert([attPayload], { onConflict: 'company_id,employee_id,date' }),
+            query,
             'تسجيل حضور الموظف',
             { table: 'attendance', id: newRecord.id, record: newRecord, action: 'upsert', payload: attPayload, options: { onConflict: 'company_id,employee_id,date' } }
           );
-          if (!writeRes.success) sbSuccess = false;
+          if (writeRes.success && writeRes.data && writeRes.data.id) {
+            newRecord.id = writeRes.data.id;
+          } else if (!writeRes.success) {
+            sbSuccess = false;
+          }
         }
 
         // تحديث LocalDatabase
@@ -5252,7 +5721,19 @@ class ApiService {
               .order('date', { ascending: false });
 
             if (filters.date) pageQuery = pageQuery.eq('date', filters.date);
-            if (filters.employeeId) pageQuery = pageQuery.eq('employee_id', filters.employeeId);
+            if (filters.employeeId && filters.employeeId !== 'all') {
+              const cleanEmpId = String(filters.employeeId).trim();
+              const isEmpUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanEmpId);
+              if (isEmpUUID) {
+                pageQuery = pageQuery.eq('employee_id', cleanEmpId);
+              } else {
+                const db = LocalDatabase.getDB();
+                const foundEmp = (db.employees || []).find(e => e.id === cleanEmpId || e.employee_code === cleanEmpId);
+                if (foundEmp && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(foundEmp.id || ''))) {
+                  pageQuery = pageQuery.eq('employee_id', foundEmp.id);
+                }
+              }
+            }
             if (filters.status && filters.status !== 'all') pageQuery = pageQuery.eq('status', filters.status);
 
             if (filters.month) {
@@ -5291,7 +5772,10 @@ class ApiService {
           if (fetchSucceeded) {
             const db = LocalDatabase.getDB();
             const empMap = {};
-            (db.employees || []).forEach(e => { empMap[e.id] = e; });
+            (db.employees || []).forEach(e => { 
+              empMap[e.id] = e; 
+              if (e.employee_code) empMap[e.employee_code] = e;
+            });
             records = allData.map(a => this.#normalizeAttendance(a, empMap));
             if (filters.department && filters.department !== 'all') {
               records = records.filter(r => r.department === filters.department);
@@ -5324,32 +5808,63 @@ class ApiService {
     try {
       await this.simulateDelay(100, signal);
       const companyId = this.getCurrentCompanyId();
-      const db = LocalDatabase.getDB();
-      const emp = (db.employees || []).find(e => e.id === entry.employeeId);
+      const rawEmpId = entry.employeeId || entry.employee_id;
+      let emp = await this.resolveEmployee(rawEmpId, signal);
+
+      if (!emp && entry.employeeName) {
+        try {
+          const res = await this.getEmployees(signal);
+          emp = (res.data || []).find(e => 
+            e.fullName === entry.employeeName || 
+            `${e.first_name || ''} ${e.last_name || ''}`.trim() === entry.employeeName
+          );
+        } catch (e) {
+          console.warn('[saveManualAttendance findByName Warning]:', e);
+        }
+      }
+
       if (!emp) return this.#createEnvelope(false, null, 'الموظف غير موجود');
 
-      const recordId = entry.id || `ATT-${entry.date.replace(/-/g, '')}-${emp.id}`;
-      let actualHours = entry.actualHours || 0;
+      const isUUID = (val) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(val || '').trim());
+      const hasValidUUID = isUUID(entry.id);
+      const recordId = hasValidUUID ? entry.id : (entry.id || `ATT-${entry.date.replace(/-/g, '')}-${emp.id}`);
+
+      const empCode = emp.employee_code || emp.employeeCode || '';
+      const cairoCheckIn = entry.checkIn ? ApiService.formatToCairoTime(entry.checkIn) : null;
+      const cairoCheckOut = entry.checkOut ? ApiService.formatToCairoTime(entry.checkOut) : null;
+
+      let actualHours = entry.actualHours ?? entry.actual_hours ?? 0;
       if (entry.checkIn && entry.checkOut) {
-        const inT = new Date(`${entry.date}T${entry.checkIn}`);
-        const outT = new Date(`${entry.date}T${entry.checkOut}`);
-        if (outT > inT) actualHours = Number(((outT - inT) / (1000 * 60 * 60)).toFixed(2));
+        const inStr = entry.checkIn.includes('T') ? entry.checkIn.split('T')[1].slice(0, 8) : entry.checkIn;
+        const outStr = entry.checkOut.includes('T') ? entry.checkOut.split('T')[1].slice(0, 8) : entry.checkOut;
+        const [inH, inM] = inStr.split(':').map(Number);
+        const [outH, outM] = outStr.split(':').map(Number);
+        let diffMinutes = (outH * 60 + (outM || 0)) - (inH * 60 + (inM || 0));
+        if (diffMinutes < 0) diffMinutes += 24 * 60; // الوردية الليلية
+        if (diffMinutes > 0) actualHours = Number((diffMinutes / 60).toFixed(2));
       }
+
+      const lateMins = Number(entry.lateMinutes ?? entry.late_minutes ?? 0);
+      const earlyMins = Number(entry.earlyLeaveMinutes ?? entry.early_leave_minutes ?? 0);
+      const otHours = Number(entry.overtimeHours ?? entry.overtime_hours ?? 0);
 
       const newRecord = {
         id: recordId,
         company_id: companyId,
         employeeId: emp.id,
-        employeeName: emp.fullName,
-        department: emp.department,
+        employee_id: emp.id,
+        employeeCode: empCode,
+        employee_code: empCode,
+        employeeName: emp.fullName || `${emp.first_name || ''} ${emp.last_name || ''}`.trim(),
+        department: emp.department || '',
         date: entry.date,
-        checkIn: entry.checkIn || null,
-        checkOut: entry.checkOut || null,
+        checkIn: cairoCheckIn,
+        checkOut: cairoCheckOut,
         actualHours: actualHours,
-        lateMinutes: Number(entry.lateMinutes || 0),
-        earlyLeaveMinutes: Number(entry.earlyLeaveMinutes || 0),
-        overtimeHours: Number(entry.overtimeHours || 0),
-        status: entry.status || (entry.lateMinutes > 15 ? 'late' : 'present'),
+        lateMinutes: lateMins,
+        earlyLeaveMinutes: earlyMins,
+        overtimeHours: otHours,
+        status: entry.status || (lateMins > 15 ? 'late' : 'present'),
         location_coords: entry.location_coords || {
           lat: 30.0444,
           lng: 31.2357,
@@ -5359,30 +5874,51 @@ class ApiService {
         notes: entry.notes || 'تعديل يدوي بواسطة إدارة الموارد البشرية'
       };
 
-      // 1. الإدراج في Supabase أولاً مع حقل company_id
+      // 1. الإدراج أو التحديث في Supabase مع حقل company_id والمقاييس الرقمية
       let sbSuccess = true;
       if (supabase) {
         const attPayload = {
-          id: recordId,
           company_id: companyId,
           employee_id: emp.id,
           date: entry.date,
-          check_in: entry.checkIn ? `${entry.date}T${entry.checkIn}` : null,
-          check_out: entry.checkOut ? `${entry.date}T${entry.checkOut}` : null,
+          check_in: ApiService.formatLocalTimeToIsoUtc(entry.date, entry.checkIn),
+          check_out: ApiService.formatLocalTimeToIsoUtc(entry.date, entry.checkOut),
+          actual_hours: Number(newRecord.actualHours ?? 0),
+          late_minutes: Number(newRecord.lateMinutes ?? 0),
+          early_leave_minutes: Number(newRecord.earlyLeaveMinutes ?? 0),
+          overtime_hours: Number(newRecord.overtimeHours ?? 0),
           status: newRecord.status,
           notes: newRecord.notes
         };
+
+        if (hasValidUUID) {
+          attPayload.id = entry.id;
+        }
+
+        let query = supabase.from('attendance').upsert([attPayload], { onConflict: 'company_id,employee_id,date' });
+        if (query && typeof query.select === 'function') {
+          query = query.select().single();
+        }
         const writeRes = await this.sbWrite(
-          supabase.from('attendance').upsert([attPayload], { onConflict: 'company_id,employee_id,date' }),
+          query,
           'تسجيل حضور يدوي',
           { table: 'attendance', id: recordId, record: newRecord, action: 'upsert', payload: attPayload, options: { onConflict: 'company_id,employee_id,date' } }
         );
-        if (!writeRes.success) sbSuccess = false;
+        if (writeRes.success && writeRes.data && writeRes.data.id) {
+          newRecord.id = writeRes.data.id;
+        } else if (!writeRes.success) {
+          sbSuccess = false;
+        }
       }
 
       // 2. التحديث في LocalDatabase
+      const db = LocalDatabase.getDB();
       if (!Array.isArray(db.attendance)) db.attendance = [];
-      const idx = db.attendance.findIndex(a => a.id === recordId || (a.employeeId === emp.id && a.date === entry.date));
+      const idx = db.attendance.findIndex(a => 
+        (newRecord.id && a.id === newRecord.id) || 
+        (entry.id && a.id === entry.id) || 
+        (a.employeeId === emp.id && a.date === entry.date)
+      );
       if (idx !== -1) db.attendance[idx] = newRecord;
       else db.attendance.push(newRecord);
       LocalDatabase.saveDB(db);
@@ -5391,7 +5927,7 @@ class ApiService {
         action: 'MANUAL_ATTENDANCE_OVERRIDE',
         actionType: 'تعديل',
         target: 'attendance',
-        targetId: recordId,
+        targetId: newRecord.id,
         details: `تعديل يدوي لسجل حضور وانصراف الموظف: ${emp.fullName} (${emp.id}) بتاريخ ${entry.date} بشركة (${companyId})`,
         payload: { ...entry, company_id: companyId }
       });
@@ -5429,14 +5965,29 @@ class ApiService {
             .eq('company_id', companyId)
             .order('created_at', { ascending: false });
 
-          if (filters.employeeId) query = query.eq('employee_id', filters.employeeId);
+          if (filters.employeeId && filters.employeeId !== 'all') {
+            const cleanEmpId = String(filters.employeeId).trim();
+            const isEmpUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanEmpId);
+            if (isEmpUUID) {
+              query = query.eq('employee_id', cleanEmpId);
+            } else {
+              const db = LocalDatabase.getDB();
+              const foundEmp = (db.employees || []).find(e => e.id === cleanEmpId || e.employee_code === cleanEmpId);
+              if (foundEmp && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(foundEmp.id || ''))) {
+                query = query.eq('employee_id', foundEmp.id);
+              }
+            }
+          }
           if (filters.status && filters.status !== 'all') query = query.eq('status', filters.status);
 
           const { data, error } = await query;
           if (!error && Array.isArray(data)) {
             const db = LocalDatabase.getDB();
             const empMap = {};
-            (db.employees || []).forEach(e => { empMap[e.id] = e; });
+            (db.employees || []).forEach(e => { 
+              empMap[e.id] = e;
+              if (e.employee_code) empMap[e.employee_code] = e;
+            });
             list = data.map(l => this.#normalizeLeave(l, empMap));
           }
         } catch (sbErr) {
@@ -5463,23 +6014,28 @@ class ApiService {
       await this.simulateDelay(100, signal);
       const companyId = this.getCurrentCompanyId();
       const db = LocalDatabase.getDB();
-      const emp = (db.employees || []).find(e => e.id === leaveData.employeeId);
+      const rawEmpId = leaveData.employeeId || leaveData.employee_id;
+      const emp = await this.resolveEmployee(rawEmpId, signal);
       if (!emp) return this.#createEnvelope(false, null, 'الموظف غير موجود');
+
+      const isUUID = (val) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(val || '').trim());
+      const hasValidUUID = isUUID(leaveData.id);
 
       const newLeave = {
         ...leaveData,
-        id: `LV-${Math.floor(100 + Math.random() * 900)}`,
+        id: hasValidUUID ? leaveData.id : (leaveData.id || `LV-${Math.floor(100 + Math.random() * 900)}`),
         company_id: companyId,
-        employeeName: emp.fullName,
-        department: emp.department,
+        employeeId: emp.id,
+        employee_id: emp.id,
+        employeeName: emp.fullName || `${emp.first_name || ''} ${emp.last_name || ''}`.trim(),
+        department: emp.department || '',
         createdAt: new Date().toISOString().split('T')[0]
       };
 
-      // 1. الإدراج في Supabase مع حقل company_id الإجباري
+      // 1. الإدراج في Supabase مع حقل company_id الإجباري وتوليد UUID تلقائياً
       let sbSuccess = true;
       if (supabase) {
         const sbLeave = {
-          id: newLeave.id,
           company_id: companyId,
           employee_id: emp.id,
           leave_type: newLeave.leaveType || 'annual',
@@ -5489,12 +6045,23 @@ class ApiService {
           status: newLeave.status || 'pending',
           created_at: new Date().toISOString()
         };
+        if (hasValidUUID) {
+          sbLeave.id = newLeave.id;
+        }
+        let query = supabase.from('leaves').insert([sbLeave]);
+        if (query && typeof query.select === 'function') {
+          query = query.select().single();
+        }
         const writeRes = await this.sbWrite(
-          supabase.from('leaves').insert([sbLeave]),
+          query,
           'تقديم طلب إجازة',
           { table: 'leaves', id: newLeave.id, record: newLeave, action: 'insert', payload: sbLeave }
         );
-        if (!writeRes.success) sbSuccess = false;
+        if (writeRes.success && writeRes.data && writeRes.data.id) {
+          newLeave.id = writeRes.data.id;
+        } else if (!writeRes.success) {
+          sbSuccess = false;
+        }
       }
 
       // 2. الحفظ في LocalDatabase
@@ -5620,15 +6187,18 @@ class ApiService {
     try {
       await this.simulateDelay(80, signal);
       const companyId = this.getCurrentCompanyId();
-      const db = LocalDatabase.getDB();
-      const emp = (db.employees || []).find(e => e.id === permData.employeeId);
+      const rawEmpId = permData.employeeId || permData.employee_id;
+      const emp = await this.resolveEmployee(rawEmpId, signal);
       if (!emp) return this.#createEnvelope(false, null, 'الموظف غير موجود');
 
+      const db = LocalDatabase.getDB();
       const newPerm = {
         ...permData,
         id: `PRM-${Math.floor(100 + Math.random() * 900)}`,
         company_id: companyId,
-        employeeName: emp.fullName,
+        employeeId: emp.id,
+        employee_id: emp.id,
+        employeeName: emp.fullName || `${emp.first_name || ''} ${emp.last_name || ''}`.trim(),
         status: permData.status || 'approved',
         approvedBy: permData.approvedBy || 'المشرف المباشر'
       };
@@ -5688,14 +6258,29 @@ class ApiService {
             .eq('company_id', companyId)
             .order('effective_date', { ascending: false });
 
-          if (filters.employeeId) query = query.eq('employee_id', filters.employeeId);
+          if (filters.employeeId && filters.employeeId !== 'all') {
+            const cleanEmpId = String(filters.employeeId).trim();
+            const isEmpUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanEmpId);
+            if (isEmpUUID) {
+              query = query.eq('employee_id', cleanEmpId);
+            } else {
+              const db = LocalDatabase.getDB();
+              const foundEmp = (db.employees || []).find(e => e.id === cleanEmpId || e.employee_code === cleanEmpId);
+              if (foundEmp && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(foundEmp.id || ''))) {
+                query = query.eq('employee_id', foundEmp.id);
+              }
+            }
+          }
           if (filters.type && filters.type !== 'all') query = query.eq('adjustment_type', filters.type);
 
           const { data, error } = await query;
           if (!error && Array.isArray(data)) {
             const db = LocalDatabase.getDB();
             const empMap = {};
-            (db.employees || []).forEach(e => { empMap[e.id] = e; });
+            (db.employees || []).forEach(e => { 
+              empMap[e.id] = e;
+              if (e.employee_code) empMap[e.employee_code] = e;
+            });
             list = data.map(a => this.#normalizeAdjustment(a, empMap));
           }
         } catch (sbErr) {
@@ -5723,10 +6308,13 @@ class ApiService {
       await this.simulateDelay(80, signal);
       const companyId = this.getCurrentCompanyId();
       const db = LocalDatabase.getDB();
-      const emp = (db.employees || []).find(e => e.id === adjData.employeeId);
+      const rawEmpId = adjData.employeeId || adjData.employee_id;
+      const emp = await this.resolveEmployee(rawEmpId, signal);
       if (!emp) return this.#createEnvelope(false, null, 'الموظف غير موجود');
 
-      const newId = `ADJ-${Math.floor(100 + Math.random() * 900)}`;
+      const isUUID = (val) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(val || '').trim());
+      const hasValidUUID = isUUID(adjData.id);
+      const newId = hasValidUUID ? adjData.id : (adjData.id || `ADJ-${Math.floor(100 + Math.random() * 900)}`);
       const effDate = adjData.date || new Date().toISOString().split('T')[0];
       const adjValue = Number(adjData.value ?? adjData.amount ?? 0);
 
@@ -5734,18 +6322,19 @@ class ApiService {
         ...adjData,
         id: newId,
         company_id: companyId,
-        employeeName: emp.fullName,
+        employeeId: emp.id,
+        employee_id: emp.id,
+        employeeName: emp.fullName || `${emp.first_name || ''} ${emp.last_name || ''}`.trim(),
         value: adjValue,
         amount: adjValue,
         date: effDate,
         month: adjData.month || effDate.slice(0, 7)
       };
 
-      // 1. الإدراج في Supabase مع حقل company_id الإجباري
+      // 1. الإدراج في Supabase مع حقل company_id الإجباري وتوليد UUID تلقائياً
       let sbSuccess = true;
       if (supabase) {
         const sbAdj = {
-          id: newId,
           company_id: companyId,
           employee_id: emp.id,
           adjustment_type: adjData.type || 'bonus',
@@ -5753,12 +6342,23 @@ class ApiService {
           effective_date: effDate,
           status: 'approved'
         };
+        if (hasValidUUID) {
+          sbAdj.id = newAdj.id;
+        }
+        let query = supabase.from('adjustments').insert([sbAdj]);
+        if (query && typeof query.select === 'function') {
+          query = query.select().single();
+        }
         const writeRes = await this.sbWrite(
-          supabase.from('adjustments').insert([sbAdj]),
+          query,
           'تسجيل معاملة مالية',
           { table: 'adjustments', id: newId, record: newAdj, action: 'insert', payload: sbAdj }
         );
-        if (!writeRes.success) sbSuccess = false;
+        if (writeRes.success && writeRes.data && writeRes.data.id) {
+          newAdj.id = writeRes.data.id;
+        } else if (!writeRes.success) {
+          sbSuccess = false;
+        }
       }
 
       // 2. الحفظ في LocalDatabase
@@ -6066,28 +6666,28 @@ class ApiService {
       await this.simulateDelay(100, signal);
       const companyId = this.getCurrentCompanyId();
 
-      // 1. تصفير الجداول في Supabase للشركة الحالية مع الحفاظ على حساب المبرمج فقط
+      // 1. تصفير الجداول في Supabase للشركة الحالية مع الحفاظ على حساب مبرمج النظام فقط
       if (supabase) {
         await Promise.allSettled([
           this.sbWrite(supabase.from('leaves').delete().eq('company_id', companyId), 'تصفير الإجازات', { table: 'leaves', action: 'delete', match: { company_id: companyId } }),
           this.sbWrite(supabase.from('attendance').delete().eq('company_id', companyId), 'تصفير الحضور', { table: 'attendance', action: 'delete', match: { company_id: companyId } }),
           this.sbWrite(supabase.from('requests').delete().eq('company_id', companyId), 'تصفير الطلبات', { table: 'requests', action: 'delete', match: { company_id: companyId } }),
           this.sbWrite(supabase.from('adjustments').delete().eq('company_id', companyId), 'تصفير المعاملات المالية', { table: 'adjustments', action: 'delete', match: { company_id: companyId } }),
-          this.sbWrite(supabase.from('employees').delete().eq('company_id', companyId).neq('email', 'aemade2016@gmail.com'), 'تصفير الموظفين', { table: 'employees', action: 'delete', match: { company_id: companyId } })
+          this.sbWrite(supabase.from('employees').delete().eq('company_id', companyId).neq('role', 'programmer'), 'تصفير الموظفين', { table: 'employees', action: 'delete', match: { company_id: companyId } })
         ]);
       }
 
       // 2. تصفير قاعدة البيانات المحلية
       LocalDatabase.resetDB();
 
-      // 3. تأكيد بقاء جلسة تسجيل الدخول لحساب المبرمج (م. أحمد عماد)
+      // 3. تأكيد بقاء جلسة تسجيل الدخول لحساب المبرمج
       const progSession = {
-        employeeId: 'aa69f711-7ca3-41dc-b628-42a5dda853f6',
-        email: 'aemade2016@gmail.com',
+        employeeId: 'EMP-0001',
+        email: 'admin@system.local',
         role: 'programmer',
         normalizedRole: 'programmer',
         roleArabic: 'مدير نظام / مبرمج',
-        authMethod: 'pin',
+        authMethod: 'email',
         company_id: companyId,
         companyId: companyId,
         loginTime: new Date().toISOString(),
@@ -6108,7 +6708,7 @@ class ApiService {
         actionType: 'تعديل',
         target: 'system',
         targetId: companyId,
-        details: `استعادة ضبط المصنع وتصفير كافة البيانات التجريبية وحصر النظام على حساب المبرمج: aemade2016@gmail.com`
+        details: 'استعادة ضبط المصنع وتصفير كافة البيانات التجريبية مع الحفاظ على حساب مبرمج النظام'
       });
 
       return this.#createEnvelope(true, null, null, { message: 'تم تصفير وإعادة ضبط كافة البيانات بنجاح' });
@@ -6120,6 +6720,8 @@ class ApiService {
 
 
 // Global browser registration
+ApiService.EMPLOYEE_PUBLIC_COLS = EMPLOYEE_PUBLIC_COLS;
+ApiService.COMPANY_PUBLIC_COLS = COMPANY_PUBLIC_COLS;
 window.ApiService = ApiService;
 window.AuditMiddleware = AuditMiddleware;
 window.LocalDatabase = LocalDatabase;
@@ -6128,6 +6730,8 @@ window.DEFAULT_AVATARS = DEFAULT_AVATARS;
 window.detectGender = detectGender;
 window.cloneData = cloneData;
 window.INITIAL_DATABASE = INITIAL_DATABASE;
+window.EMPLOYEE_PUBLIC_COLS = EMPLOYEE_PUBLIC_COLS;
+window.COMPANY_PUBLIC_COLS = COMPANY_PUBLIC_COLS;
 
   if (supabase) {
     window.supabaseClient = supabase;
