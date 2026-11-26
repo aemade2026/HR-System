@@ -1377,7 +1377,8 @@ class ApiService {
     const lastName = empData.lastName || empData.last_name || parts.slice(1).join(' ') || '';
     const isUUID = empData.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(empData.id);
     const code = empData.employee_code || empData.employeeCode || (isUUID ? null : empData.id);
-    const hasPin = empData.pin && String(empData.pin).trim() !== '' && String(empData.pin).trim() !== 'undefined';
+    const trimmedPin = empData.pin != null ? String(empData.pin).trim() : '';
+    const hasPin = trimmedPin !== '' && trimmedPin !== 'undefined' && /^\d{6}$/.test(trimmedPin);
     const payload = {
       company_id: companyId,
       employee_code: code || empData.id,
@@ -1390,7 +1391,7 @@ class ApiService {
       salary: Number(empData.baseSalary ?? empData.salary ?? 7000),
       role: empData.role || 'employee',
       status: empData.status || 'active',
-      pin: hasPin ? String(empData.pin).trim() : null,
+      pin: hasPin ? trimmedPin : null,
       hire_date: empData.hireDate || empData.hire_date || new Date().toISOString().split('T')[0]
     };
     if (isUUID) {
@@ -4908,11 +4909,35 @@ class ApiService {
   static async updateEmployee(id, updatedFields, signal = null) {
     try {
       await this.simulateDelay(100, signal);
+      if (!id || String(id).trim() === '') {
+        return this.#createEnvelope(false, null, 'معرف الموظف مطلوب');
+      }
+      if (!updatedFields || typeof updatedFields !== 'object' || Array.isArray(updatedFields)) {
+        return this.#createEnvelope(false, null, 'بيانات التحديث غير صالحة');
+      }
+
       const companyId = this.getCurrentCompanyId();
       const db = LocalDatabase.getDB();
 
-      const safeFields = { ...updatedFields };
-      delete safeFields.company_id; // حماية عزل المستأجر
+      const allowedFields = new Set([
+        'fullName', 'firstName', 'lastName', 'first_name', 'last_name',
+        'employee_code', 'employeeCode', 'email', 'phone', 'department',
+        'jobTitle', 'job_title', 'role', 'status', 'hireDate', 'hire_date',
+        'salary', 'baseSalary', 'housingAllowance', 'housing_allowance',
+        'transportAllowance', 'transport_allowance', 'otherAllowances', 'other_allowances',
+        'insurancePercent', 'insurance_percent', 'leaveBalance', 'leave_balance',
+        'shiftStart', 'shift_start', 'shiftEnd', 'shift_end',
+        'salesTarget', 'sales_target', 'salesAchieved', 'sales_achieved',
+        'commissionRate', 'commission_rate', 'salaryStatus', 'salary_status',
+        'monthlySales', 'pin', 'avatar', 'gender'
+      ]);
+
+      const safeFields = {};
+      for (const [key, value] of Object.entries(updatedFields)) {
+        if (allowedFields.has(key) && value !== undefined) {
+          safeFields[key] = value;
+        }
+      }
 
       // التحقق الأمني: لا يسمح بترقية أي حساب إلى رتبة مبرمج إلا من قبل المبرمج نفسه
       if (safeFields.role === 'programmer') {

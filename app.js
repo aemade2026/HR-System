@@ -43,54 +43,26 @@
   }
 
   /* ==========================================================================
-     1.5 AVATAR PRESETS & DYNAMIC GENDER DETECTION (ذكر / أنثى)
+     1.5 AVATAR PRESETS & DYNAMIC GENDER DETECTION (من api.js عبر window)
      ========================================================================== */
-  const DEFAULT_AVATARS = {
-    male: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
-    female: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80'
-  };
-
-  function detectGender(fullName) {
-    if (!fullName) return 'male';
-    const name = String(fullName).trim();
-    if (/^(مهندسة|دكتورة|أستاذة|مدام|آنسة|سيدة|م\/|د\/)\s/i.test(name)) return 'female';
-    if (/^(مهندس|دكتور|أستاذ|سيد|م\.|د\.)\s/i.test(name) && !/(سارة|مريم|فاطمة|نور)/i.test(name)) return 'male';
-
-    const parts = name.replace(/^(م\.|م\/|د\.|د\/|مهندس|مهندسة|أستاذ|أستاذة)\s+/i, '').trim().split(/\s+/);
-    const firstName = parts[0] || '';
-
-    const femaleNames = new Set([
-      'فاطمة', 'فاطمه', 'مريم', 'سارة', 'ساره', 'نور', 'نورهان', 'نورا', 'ياسمين', 'هدى', 'منى', 
-      'رانيا', 'داليا', 'أسماء', 'اسماء', 'شيرين', 'دينا', 'إيمان', 'ايمان', 'رحاب', 'آية', 'اية', 
-      'بسمة', 'بسمه', 'سلمى', 'سلمي', 'هدير', 'رنا', 'نهى', 'نهي', 'رضوى', 'رضوي', 'أميرة', 'اميرة', 
-      'اميره', 'أميره', 'هناء', 'نجلاء', 'مروة', 'مروه', 'ندى', 'ندي', 'ريم', 'خلود', 'عائشة', 
-      'عائشه', 'خديجة', 'خديجه', 'زينب', 'فريدة', 'فريده', 'حبيبة', 'حبيبه', 'شهد', 'جنا', 'جنى', 
-      'ملك', 'روان', 'آلاء', 'الاء', 'إسراء', 'اسراء', 'منار', 'يارا', 'هاجر', 'ميار', 'شروق', 
-      'أروى', 'اروى', 'لمياء', 'صفاء', 'وفاء', 'ولاء', 'غادة', 'غاده', 'لبنى', 'لبني', 'عبير', 
-      'هبة', 'هبه', 'رشا', 'سامية', 'ساميه', 'سحر', 'سهير', 'ماجدة', 'ماجده', 'نادية', 'ناديه'
-    ]);
-
-    if (femaleNames.has(firstName)) return 'female';
-    if (firstName.endsWith('ة') || (firstName.endsWith('اء') && firstName.length > 3)) {
-      const maleWithTa = new Set(['أسامة', 'اسامة', 'اسامه', 'أسامه', 'حمزة', 'حمزه', 'طلحة', 'طلحه', 'عبيدة', 'عبيده', 'عنترة', 'عنتره', 'قتادة', 'عكرمة']);
-      if (!maleWithTa.has(firstName)) return 'female';
-    }
-    return 'male';
-  }
-
   function getEmployeeAvatar(emp) {
-    if (!emp) return DEFAULT_AVATARS.male;
-    const gender = emp.gender || detectGender(emp.fullName || emp.name || '');
+    const avatars = window.DEFAULT_AVATARS || {
+      male: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
+      female: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80'
+    };
+    if (!emp) return avatars.male;
+    const detectFn = typeof window.detectGender === 'function' ? window.detectGender : () => 'male';
+    const gender = emp.gender || detectFn(emp.fullName || emp.name || '');
     if (emp.avatar && typeof emp.avatar === 'string' && emp.avatar.trim() !== '') {
       if (gender === 'male' && emp.avatar.includes('photo-1534528741775-53994a69daeb')) {
-        return DEFAULT_AVATARS.male;
+        return avatars.male;
       }
       if (gender === 'female' && (emp.avatar.includes('photo-1507003211169') || emp.avatar.includes('photo-1535713875002') || emp.avatar.includes('photo-1500648767791'))) {
-        return DEFAULT_AVATARS.female;
+        return avatars.female;
       }
       return emp.avatar;
     }
-    return gender === 'female' ? DEFAULT_AVATARS.female : DEFAULT_AVATARS.male;
+    return gender === 'female' ? avatars.female : avatars.male;
   }
 
   /* ==========================================================================
@@ -510,10 +482,10 @@
     if (!emp) return '';
     if (emp.employee_code) return emp.employee_code;
     if (emp.employeeCode) return emp.employeeCode;
-    const rawId = String(emp.id || '');
+    const rawId = String(emp.id || '').trim();
     if (rawId.startsWith('EMP-')) return rawId;
     if (rawId && !rawId.includes('-')) return rawId;
-    return emp.role === 'programmer' ? 'EMP-0001' : 'EMP-1001';
+    return rawId ? `EMP-${rawId.slice(-4).toUpperCase()}` : '';
   }
 
   function populateEmployeeSelects() {
@@ -8073,82 +8045,107 @@
      ========================================================================== */
 
   async function initApp() {
-    // 0. Auto-heal any corrupted tenant data in LocalDatabase
     try {
-      if (typeof LocalDatabase !== 'undefined') {
-        const db = LocalDatabase.getDB();
-        if (db && Array.isArray(db.companies)) {
-          let touched = false;
-          db.companies.forEach(c => {
-            if (!c.manager_name || c.manager_name.includes('?') || c.manager_name.includes('') || /\uFFFD/.test(c.manager_name)) {
-              c.manager_name = 'المدير العام';
-              c.managerName = c.manager_name;
-              touched = true;
-            }
-            if (!c.name || c.name.includes('?') || c.name.includes('')) {
-              c.name = 'AE (HR-SYSTEM)';
-              c.companyName = 'AE (HR-SYSTEM)';
-              touched = true;
-            }
-          });
-          if (touched) LocalDatabase.saveDB(db);
+      // 0. Auto-heal any corrupted tenant data in LocalDatabase
+      try {
+        if (typeof LocalDatabase !== 'undefined') {
+          const db = LocalDatabase.getDB();
+          if (db && Array.isArray(db.companies)) {
+            let touched = false;
+            db.companies.forEach(c => {
+              if (!c.manager_name || c.manager_name.includes('?') || c.manager_name.includes('') || /\uFFFD/.test(c.manager_name)) {
+                c.manager_name = 'المدير العام';
+                c.managerName = c.manager_name;
+                touched = true;
+              }
+              if (!c.name || c.name.includes('?') || c.name.includes('')) {
+                c.name = 'AE (HR-SYSTEM)';
+                c.companyName = 'AE (HR-SYSTEM)';
+                touched = true;
+              }
+            });
+            if (touched) LocalDatabase.saveDB(db);
+          }
         }
+      } catch (e) {}
+
+      // 1. Live Clock
+      updateLiveClock();
+      setInterval(updateLiveClock, 1000);
+
+      // 2. Theme, Sound & Fullscreen
+      initThemeAndSound();
+
+      // 3. Setup Navigation & Mobile Off-Canvas Drawer (including Programmer Panel dynamic injection)
+      ensureProgrammerNavExists();
+      setupNavigation();
+      setupMobileDrawer();
+
+      // 4. Setup Kiosk Terminal (Scanner + PIN)
+      setupKioskTerminal();
+
+      // 5. Setup Feature Modules (Admin Portal)
+      setupDashboard();
+      setupEmployeesManagement();
+      setupAttendanceView();
+      setupLeavesAndAdjustments();
+      setupPayrollEngine();
+      setupSettingsForm();
+
+      // 6. Setup Creative Auth Portal & Onboarding Wizard
+      setupAuthPortal();
+      setupOnboardingWizard();
+
+      // 7. Setup Employee Self-Service Portal
+      setupEmployeePortal();
+      setupEmployeeRequestsUI();
+      setupRequestDetailsModal();
+
+      // 8. Setup Pending Approvals Module
+      setupApprovalsModule();
+
+      // 9. Setup Quick Details Modal
+      setupQuickDetailsModal();
+
+      // 10. Setup Responsive Zero-Scroll Table Drawers (Mobile Hidden Data Expand)
+      setupResponsiveTableToggle();
+
+      // 11. Setup Accessibility & Keyboard Navigation
+      setupGlobalKeyboardNavigation();
+
+      // 12. Authenticate & Select Initial Portal (Session Check)
+      // منع جلب البيانات قبل تسجيل الدخول: يتم التحقق أولاً من وجود جلسة مصادقة نشطة
+      const hasActiveSession = await checkInitialSession();
+      if (!hasActiveSession) {
+        switchPortal('auth');
       }
-    } catch (e) {}
 
-    // 1. Live Clock
-    updateLiveClock();
-    setInterval(updateLiveClock, 1000);
-
-    // 2. Theme, Sound & Fullscreen
-    initThemeAndSound();
-
-    // 3. Setup Navigation & Mobile Off-Canvas Drawer (including Programmer Panel dynamic injection)
-    ensureProgrammerNavExists();
-    setupNavigation();
-    setupMobileDrawer();
-
-    // 4. Setup Kiosk Terminal (Scanner + PIN)
-    setupKioskTerminal();
-
-    // 5. Setup Feature Modules (Admin Portal)
-    setupDashboard();
-    setupEmployeesManagement();
-    setupAttendanceView();
-    setupLeavesAndAdjustments();
-    setupPayrollEngine();
-    setupSettingsForm();
-
-    // 6. Setup Creative Auth Portal & Onboarding Wizard
-    setupAuthPortal();
-    setupOnboardingWizard();
-
-    // 7. Setup Employee Self-Service Portal
-    setupEmployeePortal();
-    setupEmployeeRequestsUI();
-    setupRequestDetailsModal();
-
-    // 8. Setup Pending Approvals Module
-    setupApprovalsModule();
-
-    // 9. Setup Quick Details Modal
-    setupQuickDetailsModal();
-
-    // 10. Setup Responsive Zero-Scroll Table Drawers (Mobile Hidden Data Expand)
-    setupResponsiveTableToggle();
-
-    // 11. Setup Accessibility & Keyboard Navigation
-    setupGlobalKeyboardNavigation();
-
-    // 12. Authenticate & Select Initial Portal (Session Check)
-    // منع جلب البيانات قبل تسجيل الدخول: يتم التحقق أولاً من وجود جلسة مصادقة نشطة
-    const hasActiveSession = await checkInitialSession();
-    if (!hasActiveSession) {
-      switchPortal('auth');
+      console.log('✅ AE (HR-SYSTEM) RBAC HR & Payroll System successfully initialized with ES2024+ reactive architecture.');
+    } catch (error) {
+      console.error('[InitApp Fatal Error]:', error);
+      if (typeof showToast === 'function') {
+        showToast('فشل في تهيئة التطبيق، يرجى تحديث الصفحة', 'error', 10000);
+      }
+      if (document.body && !document.getElementById('initAppFatalBanner')) {
+        const errDiv = document.createElement('div');
+        errDiv.id = 'initAppFatalBanner';
+        errDiv.className = 'fixed inset-0 z-[9999] flex items-center justify-center bg-red-50/95 dark:bg-red-950/95 p-4';
+        errDiv.innerHTML = `
+          <div class="text-center max-w-md bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-2xl border border-red-200 dark:border-red-800">
+            <i class="fa-solid fa-triangle-exclamation text-5xl text-red-500 mb-3"></i>
+            <h1 class="text-xl font-bold text-red-700 dark:text-red-300">خطأ في التهيئة</h1>
+            <p class="text-sm text-red-600 dark:text-red-400 mt-2">${escapeHTML(error?.message || 'حدث خطأ غير متوقع')}</p>
+            <button type="button" onclick="location.reload()" class="mt-4 px-5 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-bold rounded-xl">إعادة تحميل</button>
+          </div>
+        `;
+        document.body.appendChild(errDiv);
+      }
     }
-
-    console.log('✅ AE (HR-SYSTEM) RBAC HR & Payroll System successfully initialized with ES2024+ reactive architecture.');
   }
+
+  // Export required controller helpers on window
+  window.requestDeviceBiometricVerification = requestDeviceBiometricVerification;
+  window.openRequestDetailsModal = openRequestDetailsModal;
 
   // Self Boot
   document.addEventListener('DOMContentLoaded', initApp);
