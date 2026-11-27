@@ -4249,9 +4249,10 @@ class ApiService {
     try {
       await this.simulateDelay(40, signal);
       const companyId = this.getCurrentCompanyId();
+      const isUUID = (val) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(val || '').trim());
       let req = null;
 
-      if (supabase) {
+      if (supabase && isUUID(id)) {
         try {
           const { data } = await supabase
             .from('requests')
@@ -4410,15 +4411,21 @@ class ApiService {
       await this.simulateDelay(80, signal);
       const companyId = this.getCurrentCompanyId();
       const db = LocalDatabase.getDB();
+      const isUUID = (val) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(val || '').trim());
+      const reqIdIsUUID = isUUID(requestId);
+      const onbEmpId = String(requestId || '').startsWith('REQ-ONB-') ? String(requestId).slice('REQ-ONB-'.length) : '';
+
       let req = (db.requests || []).find(r => r.id === requestId);
-      if (!req && supabase) {
+      if (!req && supabase && (reqIdIsUUID || isUUID(onbEmpId))) {
         try {
-          const { data, error } = await supabase
+          let fetchQ = supabase
             .from('requests')
             .select('*')
-            .eq('id', requestId)
-            .eq('company_id', companyId)
-            .maybeSingle();
+            .eq('company_id', companyId);
+          fetchQ = reqIdIsUUID
+            ? fetchQ.eq('id', requestId)
+            : fetchQ.eq('employee_id', onbEmpId).eq('request_type', 'onboarding');
+          const { data, error } = await fetchQ.maybeSingle();
           if (!error && data) {
             const empMap = {};
             (db.employees || []).forEach(e => { empMap[e.id] = e; });
@@ -4441,23 +4448,107 @@ class ApiService {
       req.manager_reply = reviewData.manager_reply || reviewData.reviewNotes || reviewData.notes || '';
       req.reviewNotes = req.manager_reply;
 
-      // 1. التحديث في Supabase مع فلتر company_id الإجباري
+      // 1. التحديث في Supabase مع فلتر company_id الإجباري وتفادي تمرير معرف غير UUID لعمود uuid
       let sbSuccess = true;
       if (supabase) {
         const updatePayload = {
           status: status,
           review_notes: req.reviewNotes
         };
-        const writeRes = await this.sbWrite(
-          supabase
-            .from('requests')
-            .update(updatePayload)
-            .eq('id', requestId)
-            .eq('company_id', companyId),
-          'تحديث حالة الطلب',
-          { table: 'requests', id: requestId, record: req, action: 'update', payload: updatePayload, match: { id: requestId, company_id: companyId } }
-        );
-        if (!writeRes.success) sbSuccess = false;
+        if (reqIdIsUUID) {
+          const writeRes = await this.sbWrite(
+            supabase
+              .from('requests')
+              .update(updatePayload)
+              .eq('id', requestId)
+              .eq('company_id', companyId),
+            'تحديث حالة الطلب',
+            { table: 'requests', id: requestId, record: req, action: 'update', payload: updatePayload, match: { id: requestId, company_id: companyId } }
+          );
+          if (!writeRes.success) sbSuccess = false;
+        } else if (isUUID(onbEmpId)) {
+          const writeRes = await this.sbWrite(
+            supabase
+              .from('requests')
+              .update(updatePayload)
+              .eq('employee_id', onbEmpId)
+              .eq('request_type', 'onboarding')
+              .eq('company_id', companyId),
+            'تحديث حالة الطلب',
+            { table: 'requests', id: requestId, record: req, action: 'update', payload: updatePayload, match: { employee_id: onbEmpId, request_type: 'onboarding', company_id: companyId } }
+          );
+          if (!writeRes.success) sbSuccess = false;
+        } else {
+          // الطلب مُعرّف محلياً (مثل REQ-...): نتحقق إن كان قد رُفع مسبقاً أو ندرجه كسجل جديد للحصول على UUID حقيقي
+          let syncedRowId = null;
+          try {
+            const { data: foundRow } = await supabase
+              .from('requests')
+              .select('id')
+              .eq('company_id', companyId)
+              .eq('details->>id', String(requestId))
+              .maybeSingle();
+            if (foundRow && isUUID(foundRow.id)) {
+              syncedRowId = foundRow.id;
+            }
+          } catch (lookupErr) {
+            console.warn('[Supabase updateRequestStatus Lookup Warning]:', lookupErr);
+          }
+
+          if (syncedRowId) {
+            const writeRes = await this.sbWrite(
+              supabase
+                .from('requests')
+                .update(updatePayload)
+                .eq('id', syncedRowId)
+                .eq('company_id', companyId),
+              'تحديث حالة الطلب',
+              { table: 'requests', id: syncedRowId, record: req, action: 'update', payload: updatePayload, match: { id: syncedRowId, company_id: companyId } }
+            );
+            if (writeRes.success) {
+              req.id = syncedRowId;
+              delete req.pendingSync;
+              LocalDatabase.clearFromSyncQueue(requestId);
+            } else {
+              sbSuccess = false;
+            }
+          } else {
+            let empId = req.employeeId || req.employee_id;
+            if (!isUUID(empId)) {
+              const resolvedEmp = await this.resolveEmployee(empId, signal);
+              if (resolvedEmp?.id) empId = resolvedEmp.id;
+            }
+            if (isUUID(companyId) && isUUID(empId)) {
+              const sbReq = {
+                company_id: companyId,
+                employee_id: empId,
+                request_type: req.type || req.request_type || 'annual_leave',
+                details: { ...req },
+                status: status,
+                review_notes: req.reviewNotes,
+                created_at: req.submittedAt || new Date().toISOString()
+              };
+              let insQuery = supabase.from('requests').insert([sbReq]);
+              if (insQuery && typeof insQuery.select === 'function') {
+                insQuery = insQuery.select().single();
+              }
+              const writeRes = await this.sbWrite(
+                insQuery,
+                'تحديث حالة الطلب',
+                { table: 'requests', id: requestId, record: req, action: 'insert', payload: sbReq }
+              );
+              if (writeRes.success) {
+                if (writeRes.data && writeRes.data.id) {
+                  req.id = writeRes.data.id;
+                }
+                delete req.pendingSync;
+                LocalDatabase.clearFromSyncQueue(requestId);
+              } else {
+                sbSuccess = false;
+              }
+            }
+          }
+        }
       }
 
       // 2. مزامنة حالة الاعتماد مع الجداول المرتبطة
@@ -4546,9 +4637,10 @@ class ApiService {
       const companyId = this.getCurrentCompanyId();
       const db = LocalDatabase.getDB();
 
-      // 1. الحذف من Supabase مع فلتر company_id الإجباري
+      // 1. الحذف من Supabase مع فلتر company_id الإجباري (فقط للمعرفات UUID الصالحة)
+      const isUUID = (val) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(val || '').trim());
       let sbSuccess = true;
-      if (supabase) {
+      if (supabase && isUUID(requestId)) {
         const writeRes = await this.sbWrite(
           supabase
             .from('requests')
@@ -4559,6 +4651,8 @@ class ApiService {
           { table: 'requests', id: requestId, action: 'delete', match: { id: requestId, company_id: companyId } }
         );
         if (!writeRes.success) sbSuccess = false;
+      } else if (!isUUID(requestId)) {
+        LocalDatabase.clearFromSyncQueue(requestId);
       }
 
       const idx = (db.requests || []).findIndex(r => r.id === requestId);
