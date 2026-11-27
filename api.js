@@ -12,9 +12,11 @@
   // ==========================================================================
   // 1. إعدادات وبيانات الاتصال بـ Supabase
   // ==========================================================================
+  const DEFAULT_SUPABASE_URL = 'https://kvcvjmbxfjpqwypcauaw.supabase.co';
+  const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt2Y3ZqbWJ4ZmpwcXd5cGNhdWF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI4Njc1OTQsImV4cCI6MjEwODQ0MzU5NH0.QURVE7XgPsURbgz7yv_bflH3C6ESiClo2WiLzGZoC8Y';
   const runtimeConfig = typeof window !== 'undefined' ? window.__SUPABASE_CONFIG__ : null;
-  const SUPABASE_URL = runtimeConfig?.url || '';
-  const SUPABASE_ANON_KEY = runtimeConfig?.anonKey || '';
+  const SUPABASE_URL = runtimeConfig?.url || DEFAULT_SUPABASE_URL;
+  const SUPABASE_ANON_KEY = runtimeConfig?.anonKey || DEFAULT_SUPABASE_ANON_KEY;
 
   const EMPLOYEE_PUBLIC_COLS = 'id, company_id, user_id, employee_code, first_name, last_name, email, phone, department, job_title, role, salary, hire_date, status, shift_start, shift_end, housing_allowance, transport_allowance, other_allowances, insurance_percent, leave_balance, sales_target, sales_achieved, commission_rate, salary_status, created_at, updated_at';
   const COMPANY_PUBLIC_COLS = 'id, name, tax_number, subscription_plan, is_active, company_lat, company_lng, allowed_radius_meters, status, manager_name, manager_phone, manager_email, created_at, updated_at';
@@ -4408,7 +4410,28 @@ class ApiService {
       await this.simulateDelay(80, signal);
       const companyId = this.getCurrentCompanyId();
       const db = LocalDatabase.getDB();
-      const req = (db.requests || []).find(r => r.id === requestId);
+      let req = (db.requests || []).find(r => r.id === requestId);
+      if (!req && supabase) {
+        try {
+          const { data, error } = await supabase
+            .from('requests')
+            .select('*')
+            .eq('id', requestId)
+            .eq('company_id', companyId)
+            .maybeSingle();
+          if (!error && data) {
+            const empMap = {};
+            (db.employees || []).forEach(e => { empMap[e.id] = e; });
+            req = this.#normalizeRequest(data, empMap);
+            if (req) {
+              if (!Array.isArray(db.requests)) db.requests = [];
+              db.requests.unshift(req);
+            }
+          }
+        } catch (sbErr) {
+          console.warn('[Supabase updateRequestStatus Fetch Warning]:', sbErr);
+        }
+      }
       if (!req) return this.#createEnvelope(false, null, 'الطلب غير موجود');
 
       const prevStatus = req.status;

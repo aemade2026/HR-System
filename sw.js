@@ -53,8 +53,13 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(req.url);
 
-  // Bypass cache for Supabase backend and REST API requests to ensure real-time data sync
-  if (url.hostname.includes('supabase.co') || url.pathname.includes('/rest/v1/')) {
+  // Bypass cache for Supabase backend, REST API, and dynamic runtime config
+  if (
+    url.hostname.includes('supabase.co') ||
+    url.pathname.includes('/rest/v1/') ||
+    url.pathname === '/supabase-config.js' ||
+    url.pathname.endsWith('/supabase-config.js')
+  ) {
     return;
   }
 

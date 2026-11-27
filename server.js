@@ -62,8 +62,28 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Parse path
-  let safePath = path.normalize(decodeURIComponent(req.url.split('?')[0])).replace(/^(\.\.[/\\])+/, '');
+  // Parse path & block hidden dotfiles/directories (e.g. /.env, /.git)
+  let decodedPath;
+  try {
+    decodedPath = decodeURIComponent(req.url.split('?')[0]);
+  } catch {
+    res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('400 Bad Request');
+    return;
+  }
+
+  let safePath = path.normalize(decodedPath).replace(/^(\.\.[/\\])+/, '');
+  const posixSafePath = safePath.replace(/\\/g, '/');
+  if (
+    decodedPath.startsWith('.') ||
+    decodedPath.includes('/.') ||
+    posixSafePath.startsWith('.') ||
+    posixSafePath.includes('/.')
+  ) {
+    res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('403 Forbidden');
+    return;
+  }
   if (safePath === '/' || safePath === '\\') {
     safePath = '/index.html';
   }
