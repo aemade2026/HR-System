@@ -4411,6 +4411,9 @@
 
     closeDecisionBtn?.addEventListener('click', () => decisionModal?.classList.add('hidden'));
     cancelDecisionBtn?.addEventListener('click', () => decisionModal?.classList.add('hidden'));
+    decisionModal?.addEventListener('click', (e) => {
+      if (e.target === decisionModal) decisionModal.classList.add('hidden');
+    });
 
     decisionForm?.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -4434,7 +4437,7 @@
         decisionModal?.classList.add('hidden');
         showToast(
           actionType === 'approved' 
-            ? 'تم اعتماد والموافقة على الطلب بنجاح وتحديث حساب الموظف فورياً' 
+            ? 'تم اعتماد الطلب والموافقة عليه بنجاح، وتم تحديث حساب الموظف فورياً'
             : 'تم تسجيل رفض الطلب وتدوين الملاحظات للموظف',
           actionType === 'approved' ? 'success' : 'info'
         );
@@ -4796,7 +4799,12 @@
     document.getElementById('decisionRequestDates').textContent = timingText;
 
     const notesInput = document.getElementById('decisionNotesInput');
-    if (notesInput) notesInput.value = req.manager_reply || '';
+    if (notesInput) {
+      notesInput.value = '';
+      notesInput.placeholder = actionType === 'approved'
+        ? 'اكتب ملاحظاتك وتوجيهاتك للموظف (اختياري)...'
+        : 'اكتب سبب الرفض ومبرره للموظف...';
+    }
 
     const iconEl = document.getElementById('managerDecisionIcon');
     const titleTextEl = document.getElementById('managerDecisionTitleText');
