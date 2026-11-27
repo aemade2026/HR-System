@@ -2,8 +2,26 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = __dirname;
+
+function loadEnvFile() {
+  const envPath = path.join(PUBLIC_DIR, '.env');
+  if (!fs.existsSync(envPath)) return;
+
+  const lines = fs.readFileSync(envPath, 'utf8').split(/\r?\n/);
+  for (const line of lines) {
+    const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)?\s*$/);
+    if (!match || process.env[match[1]]) continue;
+    let value = (match[2] || '').trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    process.env[match[1]] = value;
+  }
+}
+
+loadEnvFile();
+const PORT = process.env.PORT || 3000;
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -23,6 +41,20 @@ const server = http.createServer((req, res) => {
   // Allow CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+
+  const requestPath = req.url.split('?')[0];
+  if (requestPath === '/supabase-config.js') {
+    const config = {
+      url: process.env.SUPABASE_URL || '',
+      anonKey: process.env.SUPABASE_ANON_KEY || ''
+    };
+    res.writeHead(200, {
+      'Content-Type': 'application/javascript; charset=utf-8',
+      'Cache-Control': 'no-store'
+    });
+    res.end(`window.__SUPABASE_CONFIG__=${JSON.stringify(config).replace(/</g, '\\u003c')};`);
+    return;
+  }
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204);

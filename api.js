@@ -12,15 +12,19 @@
   // ==========================================================================
   // 1. إعدادات وبيانات الاتصال بـ Supabase
   // ==========================================================================
-  const SUPABASE_URL = "https://kvcvjmbxfjpqwypcauaw.supabase.co";
-  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt2Y3ZqbWJ4ZmpwcXd5cGNhdWF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI4Njc1OTQsImV4cCI6MjEwODQ0MzU5NH0.QURVE7XgPsURbgz7yv_bflH3C6ESiClo2WiLzGZoC8Y";
+  const runtimeConfig = typeof window !== 'undefined' ? window.__SUPABASE_CONFIG__ : null;
+  const SUPABASE_URL = runtimeConfig?.url || '';
+  const SUPABASE_ANON_KEY = runtimeConfig?.anonKey || '';
 
   const EMPLOYEE_PUBLIC_COLS = 'id, company_id, user_id, employee_code, first_name, last_name, email, phone, department, job_title, role, salary, hire_date, status, shift_start, shift_end, housing_allowance, transport_allowance, other_allowances, insurance_percent, leave_balance, sales_target, sales_achieved, commission_rate, salary_status, created_at, updated_at';
   const COMPANY_PUBLIC_COLS = 'id, name, tax_number, subscription_plan, is_active, company_lat, company_lng, allowed_radius_meters, status, manager_name, manager_phone, manager_email, created_at, updated_at';
 
   // تهيئة عميل Supabase باستخدام let داخل النطاق المغلق لتفادي خطأ Redeclaration
   let supabase = null;
-  if (typeof window !== 'undefined' && window.supabase && typeof window.supabase.createClient === 'function') {
+  const canInitializeSupabase = runtimeConfig == null || (SUPABASE_URL && SUPABASE_ANON_KEY);
+  if (canInitializeSupabase &&
+      typeof window !== 'undefined' && window.supabase &&
+      typeof window.supabase.createClient === 'function') {
     try {
       supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     } catch (e) {
@@ -2009,14 +2013,16 @@ class ApiService {
 
         if (supabase) {
           try {
+            const companyId = this.getCurrentCompanyId();
             const { data, error } = await supabase
               .from('employees')
               .select(EMPLOYEE_PUBLIC_COLS)
               .or(`id.eq.${employeeId},employee_code.eq.${employeeId}`)
-              .limit(1);
-            if (data && data.length > 0 && !error) {
-              emp = this.#normalizeEmployee(data[0]);
-              targetCompanyId = data[0].company_id;
+              .eq('company_id', companyId)
+              .maybeSingle();
+            if (data && !error) {
+              emp = this.#normalizeEmployee(data);
+              targetCompanyId = data.company_id;
             }
           } catch (sbErr) {
             console.warn('[Supabase Fingerprint Login Fallback]:', sbErr);
@@ -3192,6 +3198,14 @@ class ApiService {
           message: 'يرجى إدخال كلمة مرور للمدير لا تقل عن 6 خانات'
         });
       }
+      const hasUppercase = /[A-Z]/.test(password);
+      const hasLowercase = /[a-z]/.test(password);
+      const hasDigit = /\d/.test(password);
+      if (!hasUppercase || !hasLowercase || !hasDigit) {
+        return this.#createEnvelope(false, null, 'يجب أن تحتوي كلمة المرور على حروف كبيرة وصغيرة وأرقام على الأقل', {
+          message: 'يجب أن تحتوي كلمة المرور على حروف كبيرة وصغيرة وأرقام على الأقل'
+        });
+      }
 
       const db = LocalDatabase.getDB();
       if (!Array.isArray(db.companies)) db.companies = cloneData(INITIAL_DATABASE.companies || []);
@@ -3212,11 +3226,11 @@ class ApiService {
             .select('id, name, status, manager_email')
             .eq('manager_email', email)
             .eq('status', 'active')
-            .limit(1);
+            .maybeSingle();
 
-          if (existingActive && existingActive.length > 0) {
-            return this.#createEnvelope(false, null, `البريد الإلكتروني (${email}) مسجل بالفعل لشركة نشطة أخرى (${existingActive[0].name}). يرجى استخدام بريد إلكتروني مختلف أو تسجيل الدخول.`, {
-              message: `البريد الإلكتروني (${email}) مسجل بالفعل لشركة نشطة أخرى (${existingActive[0].name}). يرجى استخدام بريد إلكتروني مختلف أو تسجيل الدخول.`
+          if (existingActive) {
+            return this.#createEnvelope(false, null, `البريد الإلكتروني (${email}) مسجل بالفعل لشركة نشطة أخرى (${existingActive.name}). يرجى استخدام بريد إلكتروني مختلف أو تسجيل الدخول.`, {
+              message: `البريد الإلكتروني (${email}) مسجل بالفعل لشركة نشطة أخرى (${existingActive.name}). يرجى استخدام بريد إلكتروني مختلف أو تسجيل الدخول.`
             });
           }
         } catch (sbErr) {
