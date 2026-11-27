@@ -724,14 +724,17 @@ class AuditMiddleware {
       if (typeof supabase !== 'undefined' && supabase && typeof supabase.from === 'function') {
         try {
           const compId = payload?.company_id || (typeof ApiService !== 'undefined' && typeof ApiService.getCurrentCompanyId === 'function' ? ApiService.getCurrentCompanyId() : null);
+          const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
           const sbEntry = {
             company_id: compId,
             action: logEntry.action,
             target: logEntry.target,
-            target_id: logEntry.targetId,
             details: logEntry.details,
             performed_by: actor.name || actor.id || 'SYSTEM'
           };
+          if (uuidPattern.test(String(logEntry.targetId || ''))) {
+            sbEntry.target_id = logEntry.targetId;
+          }
           const fromQ = supabase.from('audit_logs');
           if (fromQ && typeof fromQ.insert === 'function') {
             const insRes = fromQ.insert([sbEntry]);
@@ -4406,9 +4409,7 @@ class ApiService {
       if (supabase) {
         const updatePayload = {
           status: status,
-          reviewed_by: req.reviewedBy,
-          review_notes: req.reviewNotes,
-          details: req
+          review_notes: req.reviewNotes
         };
         const writeRes = await this.sbWrite(
           supabase
@@ -6153,8 +6154,7 @@ class ApiService {
       let sbSuccess = true;
       if (supabase) {
         const updatePayload = {
-          status: status,
-          reviewed_by: approvedBy
+          status: status
         };
         const writeRes = await this.sbWrite(
           supabase
